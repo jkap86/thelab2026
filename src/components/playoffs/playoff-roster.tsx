@@ -154,11 +154,11 @@ const PlayoffRoster = ({
       allScores[round]?.[roster.roster_id]?.optimal_starters?.map((player) => {
         const fontColor =
           player.result === "W"
-            ? "font-green-600"
+            ? "text-green-400"
             : player.result === "L"
-            ? "font-red-600"
+            ? "text-red-400"
             : player.is_in_progress
-            ? "font-yellow-600"
+            ? "text-yellow-400"
             : "";
         return {
           id: player.optimal_player_id.toString(),
@@ -208,11 +208,11 @@ const PlayoffRoster = ({
       allScores[round]?.[roster.roster_id]?.optimal_bench?.map((player) => {
         const fontColor =
           player.result === "W"
-            ? "font-green-600"
+            ? "text-green-400"
             : player.result === "L"
-            ? "font-red-600"
+            ? "text-red-400"
             : player.is_in_progress
-            ? "font-yellow-600"
+            ? "text-yellow-400"
             : "";
         return {
           id: player.optimal_player_id.toString(),

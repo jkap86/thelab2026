@@ -80,24 +80,28 @@ export async function GET(req: NextRequest) {
                 {
                   optimal_starters: optimalStarters.map((player) => ({
                     ...player,
-                    playing: schedule[allplayers[player.optimal_player_id].team]
+                    playing: schedule[
+                      allplayers[player.optimal_player_id]?.team
+                    ]
                       ? true
                       : false,
                     is_in_progress:
                       stats[player.optimal_player_id]?.is_in_progress,
                     result:
-                      schedule[allplayers[player.optimal_player_id].team]
+                      schedule[allplayers[player.optimal_player_id]?.team]
                         ?.result,
                   })),
                   optimal_bench: optimalBench.map((player) => ({
                     ...player,
-                    playing: schedule[allplayers[player.optimal_player_id].team]
+                    playing: schedule[
+                      allplayers[player.optimal_player_id]?.team
+                    ]
                       ? true
                       : false,
                     is_in_progress:
                       stats[player.optimal_player_id]?.is_in_progress,
                     result:
-                      schedule[allplayers[player.optimal_player_id].team]
+                      schedule[allplayers[player.optimal_player_id]?.team]
                         ?.result,
                   })),
                   points: optimalStarters.reduce(
