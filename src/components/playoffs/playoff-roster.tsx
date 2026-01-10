@@ -151,85 +151,108 @@ const PlayoffRoster = ({
     const round = selectedRounds[0];
 
     dataLineup =
-      allScores[round]?.[roster.roster_id]?.optimal_starters?.map((player) => ({
-        id: player.optimal_player_id.toString(),
-        columns: [
-          {
-            text: <div>{getSlotAbbrev(player.slot__index.split("__")[0])}</div>,
-            colspan: 1,
-            className: "font-metal",
-          },
-          {
-            text: (
-              <div>
-                <Avatar
-                  avatar_id={player.optimal_player_id}
-                  type="player"
-                  name={
-                    allplayers?.[player.optimal_player_id]?.full_name ??
-                    player.optimal_player_id
-                  }
-                />
-              </div>
-            ),
-            colspan: 4,
-            className: "font-metal",
-          },
-          {
-            text: (
-              <div>
-                {player.value.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </div>
-            ),
-            colspan: 2,
-            className: "font-score",
-          },
-        ],
-      })) ?? [];
+      allScores[round]?.[roster.roster_id]?.optimal_starters?.map((player) => {
+        const fontColor =
+          player.result === "W"
+            ? "font-green-600"
+            : player.result === "L"
+            ? "font-red-600"
+            : player.is_in_progress
+            ? "font-yellow-600"
+            : "";
+        return {
+          id: player.optimal_player_id.toString(),
+          columns: [
+            {
+              text: (
+                <div>{getSlotAbbrev(player.slot__index.split("__")[0])}</div>
+              ),
+              colspan: 1,
+              className: "font-metal " + fontColor,
+            },
+            {
+              text: (
+                <div>
+                  <Avatar
+                    avatar_id={player.optimal_player_id}
+                    type="player"
+                    name={
+                      allplayers?.[player.optimal_player_id]?.full_name ??
+                      player.optimal_player_id
+                    }
+                  />
+                </div>
+              ),
+              colspan: 4,
+              className: "font-metal " + fontColor,
+            },
+            {
+              text: (
+                <div>
+                  {player.value.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+              ),
+              colspan: 2,
+              className: "font-score " + fontColor,
+            },
+          ],
+        };
+      }) ?? [];
 
     const className = "bg-radial-table4 ";
+
     dataBench =
-      allScores[round]?.[roster.roster_id]?.optimal_bench?.map((player) => ({
-        id: player.optimal_player_id.toString(),
-        columns: [
-          {
-            text: <div>BN</div>,
-            colspan: 1,
-            className: className + "font-metal",
-          },
-          {
-            text: (
-              <div>
-                <Avatar
-                  avatar_id={player.optimal_player_id}
-                  type="player"
-                  name={
-                    allplayers?.[player.optimal_player_id]?.full_name ??
-                    player.optimal_player_id
-                  }
-                />
-              </div>
-            ),
-            colspan: 4,
-            className: className + "font-metal",
-          },
-          {
-            text: (
-              <div>
-                {player.value.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </div>
-            ),
-            colspan: 2,
-            className: className + "font-score",
-          },
-        ],
-      })) ?? [];
+      allScores[round]?.[roster.roster_id]?.optimal_bench?.map((player) => {
+        const fontColor =
+          player.result === "W"
+            ? "font-green-600"
+            : player.result === "L"
+            ? "font-red-600"
+            : player.is_in_progress
+            ? "font-yellow-600"
+            : "";
+        return {
+          id: player.optimal_player_id.toString(),
+          columns: [
+            {
+              text: <div>BN</div>,
+              colspan: 1,
+              className: className + " font-metal " + fontColor,
+            },
+            {
+              text: (
+                <div>
+                  <Avatar
+                    avatar_id={player.optimal_player_id}
+                    type="player"
+                    name={
+                      allplayers?.[player.optimal_player_id]?.full_name ??
+                      player.optimal_player_id
+                    }
+                  />
+                </div>
+              ),
+              colspan: 4,
+              className: className + " font-metal " + fontColor,
+            },
+            {
+              text: (
+                <div>
+                  {player.value.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+              ),
+              colspan: 2,
+              className: className + " font-score " + fontColor,
+            },
+          ],
+        };
+      }) ?? [];
   }
 
   return (

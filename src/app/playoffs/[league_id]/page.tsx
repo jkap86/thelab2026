@@ -109,8 +109,8 @@ export default function PlayoffsPage({
     if (!nflState || !league) return;
 
     const params = new URLSearchParams({
-      season: nflState.season.toString(),
-      season_type: "regular",
+      season: "2025",
+      season_type: "post",
       week: (nflState.leg - 17).toString(),
       rosters: JSON.stringify(
         league.rosters.map((roster) => [roster.roster_id, roster.players ?? []])

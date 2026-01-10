@@ -115,6 +115,7 @@ export async function GET(req: NextRequest) {
             );
 
             timeoutId = setTimeout(sendData, delay);
+            console.log({ delay });
           }
         };
         await sendData();
