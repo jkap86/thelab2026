@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+:root {
+  --backgroundcolor: rgb(0, 0, 25);
+  --color1: #00ceb8;
+  --color2: rgb(0, 0, 100);
+  --color3: #4169e1;
+  --color4: #1a1c20;
+  --color5: rgb(50, 50, 50);
+  --color6: rgb(100, 20, 100);
+  --color7: rgb(218, 165, 32);
+  --color8: #ffff0040;
+  --color9: rgba(218, 165, 32, 0.5);
+  --color10: rgb(20, 4, 60);
+  --color11: rgb(71, 0, 0);
+  --fontPulang: "Pulang", sans-serif;
+  --fontChill: "Chillit", sans-serif;
+  --fontMetal: "d Dredex", sans-serif;
+  --fontHugmate: "Hugmate", sans-serif;
+  --fontScore: "Maria", monospace;
+
+  font-size: 2dvmin;
+}
+
+* {
+  border: none;
+  scrollbar-width: none;
+  text-shadow: 0 0 0.25rem black;
+}
+
+body {
+  background-color: var(--backgroundcolor);
+  color: white;
+  width: CLAMP(100dvmin, 1000px, 100vw);
+  margin: auto;
+  overflow-x: hidden;
+}
+
+.font-pulang {
+  font-family: var(--fontPulang);
+  letter-spacing: 0.25rem;
+}
+
+.font-chill {
+  font-family: var(--fontChill);
+}
+
+.font-score {
+  font-family: var(--fontScore);
+}
+
+.font-metal {
+  font-family: var(--fontMetal);
+}
+
+.font-hugmate {
+  font-family: var(--fontHugmate);
+}
+
+@keyframes bubble1 {
+  0% {
+    scale: 0.1;
+  }
+
+  99% {
+    scale: 2;
+  }
+}
+
+@keyframes bubble2 {
+  0% {
+    scale: 0.1;
+  }
+
+  100% {
+    scale: 2.5;
+  }
+}
+
+a.home {
+  position: relative;
+  z-index: 1;
+  padding: 1rem;
+  font-weight: bold;
+  color: var(--color7);
+  text-shadow: 0 0 0.5rem black;
+  height: 0;
+  display: block;
+  font-size: 1rem;
+  font-family: var(--fontChill);
+  letter-spacing: 0.25rem;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  text-align: center;
+}
+
+input {
+  font-size: max(20px, inherit);
+}
+
+table {
+  table-layout: fixed;
+  width: 100%;
+  margin: auto;
+  border-collapse: separate;
+  border-spacing: 0rem;
+  background-color: black;
+}
+
+select option {
+  background-color: black;
+  color: white;
+}
+
+.bg-radial-gray {
+  background-image: radial-gradient(gray 0%, rgb(60, 59, 59) 100%);
+}
+
+.bg-radial-gray2 {
+  background-image: radial-gradient(#fff -250%, #000 100%);
+}
+
+.bg-radial-active {
+  background-image: radial-gradient(var(--color4) -50%, var(--color1) 100%);
+}
+
+.bg-radial-table1 {
+  background-image: radial-gradient(var(--color3) -300%, var(--color4) 100%);
+}
+
+.bg-radial-table2 {
+  background-image: radial-gradient(rgb(80, 0, 0) -100%, var(--color4) 100%);
+}
+
+.bg-radial-table3 {
+  background-image: radial-gradient(var(--color6) 0%, var(--color4) 100%);
+}
+
+.bg-radial-table4 {
+  background-image: radial-gradient(rgb(20, 52, 12) 0%, black 150%);
+}
+
+.text-overflow {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  width: inherit;
+}
+
+th.sort,
+td.sort {
+  border-left: 0.2rem double var(--color9);
+  border-right: 0.2rem double var(--color9);
+}
+
+th.sort.icon {
+  border: 0.2rem double var(--color9);
+}
+
+th,
+td {
+  border: inset 0.2rem double transparent;
+  box-shadow: inset 0 0 2rem black;
+}
