@@ -21,6 +21,7 @@ const ManagerPage = () => {
       searched={searched}
       setSearched={setSearched}
       placeholder="Username"
+      type="username"
     />
   );
 };

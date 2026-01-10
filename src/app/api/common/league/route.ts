@@ -1,8 +1,8 @@
 import pool from "@/lib/pool";
 import { NextRequest, NextResponse } from "next/server";
 import { updateLeagues } from "../../manager/leagues/route";
-import { getAllplayersCached } from "../allplayers/utils/get-allplayers";
-import { Allplayer } from "@/lib/types/common-types";
+
+const CC = "public, max-age=120, s-maxage=360, stale-while-revalidate=300";
 
 const CUTOFF = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
 

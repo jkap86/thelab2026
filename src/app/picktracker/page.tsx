@@ -13,6 +13,7 @@ const PickTrackerHomepage = () => {
       searched={searched}
       setSearched={setSearched}
       placeholder="League ID"
+      type="leagueId"
     />
   );
 };

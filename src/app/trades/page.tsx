@@ -21,6 +21,7 @@ const TradesPage = () => {
       <div className="flex justify-center items-center font-score text-[1.5rem]">
         {["All", "Leaguemate"].map((item) => (
           <div
+            key={item}
             className={
               "w-[10rem] py-4  mx-8 flex justify-center items-center rounded " +
               (tab === item ? "bg-radial-active" : "bg-radial-gray")
