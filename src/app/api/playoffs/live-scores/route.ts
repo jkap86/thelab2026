@@ -1,7 +1,6 @@
-import { OptimalPlayer } from "@/lib/types/common-types";
+import { getCachedLiveStats } from "./utils/stats-cache";
 import { NextRequest, NextResponse } from "next/server";
 import { getAllplayersCached } from "../../common/allplayers/utils/get-allplayers";
-import { getLiveStats } from "../../utils/get-live-stats";
 import { getPlayerPoints } from "../../utils/get-player-points";
 import { getOptimalStarters } from "@/utils/common/get-optimal-starters";
 
@@ -47,7 +46,7 @@ export async function GET(req: NextRequest) {
           if (isClosed) return;
           console.log("---fetching live stats---");
 
-          const { statsArray, delay, schedule } = await getLiveStats(
+          const { statsArray, delay, schedule } = await getCachedLiveStats(
             week.toString(),
             parseInt(season),
             seasonType as "regular" | "post"
