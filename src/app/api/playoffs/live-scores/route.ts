@@ -44,7 +44,6 @@ export async function GET(req: NextRequest) {
       async start(controller) {
         const sendData = async () => {
           if (isClosed) return;
-          console.log("---fetching live stats---");
 
           const { statsArray, delay, schedule } = await getCachedLiveStats(
             week.toString(),
@@ -118,7 +117,6 @@ export async function GET(req: NextRequest) {
             );
 
             timeoutId = setTimeout(sendData, delay);
-            console.log({ delay });
           }
         };
         await sendData();

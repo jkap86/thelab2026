@@ -28,6 +28,7 @@ export async function getCachedLiveStats(
   }
 
   // Start new fetch (only one at a time)
+  console.log("---fetching live stats---");
   fetchPromise = getLiveStats(week, season, seasonType).then((result) => {
     cache = { data: result, timestamp: Date.now(), key };
     fetchPromise = null;
