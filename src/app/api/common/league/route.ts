@@ -24,16 +24,7 @@ export async function GET(req: NextRequest) {
   if (leagueDb?.updated_at > CUTOFF)
     return NextResponse.json(leagueDb, { status: 200 });
 
-  const allplayers = await getAllplayersCached();
-
-  const league = await updateLeagues(
-    [league_id],
-    [],
-    1,
-    {},
-    allplayers as Allplayer[],
-    false
-  );
+  const league = await updateLeagues([league_id], [], 1);
 
   return NextResponse.json(league[0], { status: 200 });
 }
