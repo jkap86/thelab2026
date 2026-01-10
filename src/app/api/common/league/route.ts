@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     await pool.query(selectLeagueQuery, [league_id])
   ).rows[0];
 
-  if (leagueDb?.updated_at > CUTOFF)
+  if (leagueDb?.updated_at > CUTOFF && leagueDb.status !== "drafting")
     return NextResponse.json(leagueDb, { status: 200 });
 
   const league = await updateLeagues([league_id], [], 1);
