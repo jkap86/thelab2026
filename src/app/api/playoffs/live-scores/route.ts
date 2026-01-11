@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify(optimalRosters)}\n\n`)
             );
-
+            console.log({ delay });
             timeoutId = setTimeout(sendData, delay);
           }
         };
