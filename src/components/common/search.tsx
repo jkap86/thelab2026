@@ -90,7 +90,7 @@ const Search = ({
   }, [searchText, options]);
 
   const buttonClassName =
-    "w-[10%] h-full top-0 absolute right-[-7.5%]  text-[2rem] flex justify-center items-center z-13";
+    "w-[10%] h-full top-0 absolute right-[0%]  text-[2rem] flex justify-center items-center z-13";
 
   return (
     <div
@@ -102,7 +102,7 @@ const Search = ({
           className={
             "text-black text-[2rem] w-full h-full bg-[var(--color1)] text-center " +
             "outline-double outline-[var(--color3)] outline-[.5rem] rounded " +
-            "shadow-[inset_0_0_2.5rem_black] placeholder:opacity-50 relative z-13 pr-[10%] pl-[5%] text-overflow " +
+            "shadow-[inset_0_0_2.5rem_black] placeholder:opacity-50 relative z-13   text-overflow " +
             (disabled ? " opacity-[.25]" : "")
           }
           type="text"

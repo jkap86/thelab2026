@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pool";
+import { getKtcCurrent } from "../common/ktc/current/utils/get-ktc-current";
+import { getAllplayersCached } from "../common/allplayers/utils/get-allplayers";
+import { addRosterMetrics } from "../manager/leagues/utils/add-roster-metrics";
+import { Allplayer } from "@/lib/types/common-types";
+import { Roster } from "@/lib/types/trades-types";
 
 const CC = "public, max-age=120, s-maxage=1200, stale-while-revalidate=3600";
 
@@ -280,18 +285,39 @@ export async function GET(req: NextRequest) {
     WHERE ${conditions.join(" AND ")}
   `;
 
-  const trades = await (
-    await pool.query(getTradesQuery, [...values, limit, offset])
-  ).rows;
+  const [{ player_values }, allplayers] = await Promise.all([
+    getKtcCurrent(),
+    getAllplayersCached(),
+  ]);
 
-  const tradesCount = await (
+  const trades = await Promise.all(
+    await (
+      await pool.query(getTradesQuery, [...values, limit, offset])
+    ).rows.map(async (trade) => {
+      const rostersMetrics = await addRosterMetrics(
+        trade.rosters,
+        trade.league.roster_positions,
+        Object.fromEntries(player_values),
+        allplayers as Allplayer[]
+      );
+      return {
+        ...trade,
+        rosters: trade.rosters.map((roster: Roster) => ({
+          ...roster,
+          ...rostersMetrics[roster.roster_id],
+        })),
+      };
+    })
+  );
+
+  const count = await (
     await pool.query(getTradesCountQuery, values)
   ).rows[0].count;
 
   return NextResponse.json(
     {
       trades,
-      tradesCount,
+      count,
     },
     {
       status: 200,

@@ -40,7 +40,7 @@ export const fetchTrades = createAsyncThunk<
             playerId4,
             leagueType1,
             offset,
-            limit: 125,
+            limit: 100,
           },
           signal,
         });

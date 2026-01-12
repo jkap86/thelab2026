@@ -38,11 +38,11 @@ const tradesSlice = createSlice({
   name: "trades",
   initialState,
   reducers: {
-    upateTradesState: (state, action) => {
-      state = {
+    updateTradesState: (state, action) => {
+      return (state = {
         ...state,
         [action.payload.key]: action.payload.value,
-      };
+      });
     },
   },
   extraReducers: (builder) => {
@@ -53,7 +53,28 @@ const tradesSlice = createSlice({
       })
       .addCase(fetchTrades.fulfilled, (state, action) => {
         state.isLoadingTrades = false;
-        state.trades = action.payload;
+        state.errorTrades = null;
+
+        if (
+          state.trades &&
+          state.trades.playerId1 === action.payload.playerId1 &&
+          state.trades.playerId2 === action.payload.playerId2 &&
+          state.trades.playerId3 === action.payload.playerId3 &&
+          state.trades.playerId4 === action.payload.playerId4 &&
+          state.trades.leagueType1 === action.payload.leagueType1
+        ) {
+          state.trades.trades = [
+            ...state.trades.trades,
+            ...action.payload.trades.filter(
+              (trade) =>
+                !state.trades?.trades.some(
+                  (t) => t.transaction_id === trade.transaction_id
+                )
+            ),
+          ];
+        } else {
+          state.trades = action.payload;
+        }
       })
       .addCase(fetchTrades.rejected, (state, action) => {
         state.isLoadingTrades = false;
@@ -65,6 +86,6 @@ const tradesSlice = createSlice({
   },
 });
 
-export const { upateTradesState } = tradesSlice.actions;
+export const { updateTradesState } = tradesSlice.actions;
 
 export default tradesSlice.reducer;

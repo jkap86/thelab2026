@@ -17,7 +17,17 @@ export default function useFetchTrades() {
   } = useSelector((state: RootState) => state.trades);
 
   useEffect(() => {
-    if (trades || isLoadingTrades || errorTrades) return;
+    if (
+      (trades &&
+        trades.playerId1 === playerId1 &&
+        trades.playerId2 === playerId2 &&
+        trades.playerId3 === playerId3 &&
+        trades.playerId4 === playerId4 &&
+        trades.leagueType1 === leagueType1) ||
+      isLoadingTrades ||
+      errorTrades
+    )
+      return;
 
     dispatch(
       fetchTrades({

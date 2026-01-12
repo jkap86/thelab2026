@@ -302,13 +302,14 @@ function getLeagueDraftPicks(
       draft.settings.rounds === league.settings.draft_rounds
   )?.draft_order;
 
-  const startupCompletionTime = league.previous_league_id
-    ? 1
-    : drafts.find(
-        (draft) =>
-          draft.status === "complete" &&
-          draft.settings.rounds > league.settings.draft_rounds
-      )?.last_picked ?? undefined;
+  const startupCompletionTime =
+    league.previous_league_id && parseInt(league.previous_league_id) > 0
+      ? 1
+      : drafts.find(
+          (draft) =>
+            draft.status === "complete" &&
+            draft.settings.rounds > league.settings.draft_rounds
+        )?.last_picked ?? undefined;
 
   const draftPicks: { [key: number]: DraftPick[] } = {};
 
@@ -499,6 +500,8 @@ async function getTrades(
           roster_positions: league.roster_positions || [],
           scoring_settings: league.scoring_settings || {},
           settings: league.settings,
+          status: league.status,
+          season: league.season,
         },
         adds,
         drops,
@@ -509,12 +512,20 @@ async function getTrades(
           username: roster.username,
           avatar: roster.avatar,
           players: roster.players,
+          draftPicks: roster.draftpicks,
+          wins: roster.wins,
+          losses: roster.losses,
+          ties: roster.ties,
+          fp: roster.fp,
+          fpa: roster.fpa,
         })),
       };
     });
 }
 
 async function upsertUsers(users: User[]) {
+  if (users.length === 0) return;
+
   const upsertUsersQuery = `
     INSERT INTO users (user_id, username, avatar, type)
     VALUES ${users
@@ -544,6 +555,8 @@ async function upsertUsers(users: User[]) {
 }
 
 async function upsertLeagues(leagues: League[]) {
+  if (leagues.length === 0) return;
+
   const upserLeaguesQuery = `
     INSERT INTO leagues (league_id, name, avatar, season, status, settings, scoring_settings, roster_positions, rosters)
     VALUES ${leagues.map(

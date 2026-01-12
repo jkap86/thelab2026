@@ -8,6 +8,7 @@ import {
 } from "@/utils/common/format-draftpick";
 import { getTextColor } from "@/utils/common/get-text-color";
 import { ktcMinMax } from "@/utils/common/min-max-values";
+import TradeDetail from "./trade-detail";
 const Trade = ({
   trade,
   activeTrade,
@@ -41,25 +42,33 @@ const Trade = ({
       className={
         "h-[5rem] text-[1.5rem] font-chill " +
         bg +
-        "outline-double outline-1 outline-[silver]"
-      }
-      onClick={() =>
-        setActiveTrade(
-          activeTrade === trade.transaction_id ? null : trade.transaction_id
-        )
+        " outline-double outline- outline-[silver] "
       }
     >
-      <tbody>
-        <tr className={"h-[5rem]"}>
-          <td colSpan={7} className="font-score text-[1.25rem]">
-            <div className="flex justify-evenly">
+      <tbody
+        className="relative z-11"
+        onClick={() =>
+          setActiveTrade(
+            activeTrade === trade.transaction_id ? null : trade.transaction_id
+          )
+        }
+      >
+        <tr
+          className={
+            "h-[5rem] " +
+            bg +
+            (activeTrade === trade.transaction_id ? "sticky top-0 z-9" : "")
+          }
+        >
+          <td colSpan={7} className={"font-score font-black text-[1.25rem] "}>
+            <div className="flex justify-evenly text-blue-400">
               {new Date(trade.status_updated).toLocaleDateString("en-US", {
                 year: "numeric",
                 month: "numeric",
                 day: "numeric",
               })}
 
-              <em>
+              <em className="text-blue-400">
                 {new Date(trade.status_updated).toLocaleTimeString("en-US", {
                   hour: "numeric",
                   minute: "numeric",
@@ -67,8 +76,8 @@ const Trade = ({
               </em>
             </div>
           </td>
-          <td colSpan={12} className="font-hugmate">
-            <div className="flex justify-evenly">
+          <td colSpan={12} className="font-pulang font-black">
+            <div className="flex justify-evenly text-[var(--color7)] ">
               <Avatar
                 avatar_id={trade.league.avatar}
                 type="league"
@@ -77,8 +86,16 @@ const Trade = ({
             </div>
           </td>
         </tr>
-        <tr className={"h-[3rem]"}>
-          <td colSpan={3} className="text-center font-hugmate text-[1rem]">
+        <tr
+          className={
+            "h-[5rem] " +
+            bg +
+            (activeTrade === trade.transaction_id
+              ? "sticky top-[5rem] z-8"
+              : "")
+          }
+        >
+          <td colSpan={3} className="text-center font-score text-[1.25rem]">
             <div>
               {trade.league.settings.type === 2
                 ? "Dynasty"
@@ -87,21 +104,21 @@ const Trade = ({
                 : "Redraft"}
             </div>
           </td>
-          <td colSpan={3} className="text-center font-hugmate text-[1rem]">
+          <td colSpan={3} className="text-center font-score text-[1.25rem]">
             <div>
               {trade.league.settings.best_ball === 1 ? "Bestball" : "Lineup"}
             </div>
           </td>
-          <td colSpan={2} className="text-center font-hugmate text-[1rem]">
+          <td colSpan={2} className="text-center font-score text-[1.25rem]">
             <div>{trade.rosters.length} Tm</div>
           </td>
-          <td colSpan={2} className="text-center font-hugmate text-[1rem]">
+          <td colSpan={2} className="text-center font-score text-[1.25rem]">
             <div>
               S{" "}
               {trade.league.roster_positions.filter((rp) => rp !== "BN").length}
             </div>
           </td>
-          <td colSpan={4} className="text-center font-hugmate text-[1rem]">
+          <td colSpan={4} className="text-center font-score text-[1.25rem]">
             <div>
               {trade.league.roster_positions
                 .filter((rp) => rp === "QB")
@@ -113,7 +130,7 @@ const Trade = ({
               SF
             </div>
           </td>
-          <td colSpan={5} className="text-center font-hugmate text-[1rem]">
+          <td colSpan={5} className="text-center font-score text-[1.25rem]">
             <div>
               {trade.league.roster_positions
                 .filter((rp) => rp === "TE")
@@ -134,7 +151,7 @@ const Trade = ({
           );
 
           return (
-            <tr key={`${user_id}-${trade.transaction_id}`}>
+            <tr key={`${user_id}-${trade.transaction_id} `}>
               <td
                 colSpan={5}
                 className={"min-h-[5rem] " + bg + " text-[1.5rem]"}
@@ -147,8 +164,11 @@ const Trade = ({
                   />
                 </div>
               </td>
-              <td colSpan={8} className={" text-[1.25rem]"}>
-                <table className={bg + " text-[1.25rem]"}>
+              <td
+                colSpan={8}
+                className={"min-h-[5rem] " + bg + " text-[1.25rem]"}
+              >
+                <table className={bg + " text-[1.25rem] min-h-[5rem]"}>
                   <tbody>
                     {Object.keys(trade.adds)
                       .filter((add) => trade.adds[add] === user_id)
@@ -298,6 +318,15 @@ const Trade = ({
           );
         })}
       </tbody>
+      {activeTrade === trade.transaction_id && (
+        <tbody>
+          <tr>
+            <td colSpan={19}>
+              <TradeDetail trade={trade} />
+            </td>
+          </tr>
+        </tbody>
+      )}
     </table>
   );
 };

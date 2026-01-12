@@ -1,4 +1,8 @@
 import { League as LeagueType } from "@/lib/types/manager-types";
+import {
+  League as TradeLeagueType,
+  Roster as TradeRosterType,
+} from "@/lib/types/trades-types";
 import TableMain from "../common/table-main";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/redux/store";
@@ -12,7 +16,13 @@ import Roster from "../common/roster";
 import { setTeamsTabState } from "@/redux/manager/manager-slice";
 import HeaderModal from "../common/header-modal";
 
-const League = ({ type, league }: { type: number; league: LeagueType }) => {
+const League = ({
+  type,
+  league,
+}: {
+  type: number;
+  league: LeagueType | (TradeLeagueType & { rosters: TradeRosterType[] });
+}) => {
   const dispatch: AppDispatch = useDispatch();
   const { column1, column2, sortBy } = useSelector(
     (state: RootState) => state.manager.tabs.teams
@@ -104,7 +114,7 @@ const League = ({ type, league }: { type: number; league: LeagueType }) => {
               {
                 text: <div>INDEX</div>,
                 colspan: 1,
-                className: "font-chill",
+                className: "font-chill text-center",
               },
               {
                 text: (

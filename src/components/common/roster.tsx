@@ -1,4 +1,5 @@
 import { Roster as RosterType } from "@/lib/types/manager-types";
+import { Roster as TradeRosterType } from "@/lib/types/trades-types";
 import TableMain from "./table-main";
 import { AppDispatch, RootState } from "@/redux/store";
 import { useDispatch, useSelector } from "react-redux";
@@ -9,7 +10,13 @@ import { getTextColor } from "@/utils/common/get-text-color";
 import { getAgeMinMaxValues, ktcMinMax } from "@/utils/common/min-max-values";
 import { setRosterTabState } from "@/redux/manager/manager-slice";
 
-const Roster = ({ type, roster }: { type: number; roster: RosterType }) => {
+const Roster = ({
+  type,
+  roster,
+}: {
+  type: number;
+  roster: RosterType | TradeRosterType;
+}) => {
   const dispatch: AppDispatch = useDispatch();
   const { allplayers, ktcCurrent } = useSelector(
     (state: RootState) => state.common

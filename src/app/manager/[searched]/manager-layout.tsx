@@ -62,7 +62,7 @@ export default function ManagerLayout({
               <h1 className="text-[2rem] text-[var(--color1)]">
                 {leaguesProgress} Leagues Loaded
               </h1>
-              <div className="flex flex-1">
+              <div className="flex flex-col flex-1">
                 <LoadingIcon />
               </div>
             </div>

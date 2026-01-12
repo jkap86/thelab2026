@@ -5,11 +5,15 @@ const PageNumbers = ({
   itemsPerPage,
   page,
   setPage,
+  count,
+  fetchMore,
 }: {
   data: Row[];
   itemsPerPage?: number;
   page: number;
   setPage: (page: number) => void;
+  count?: number;
+  fetchMore?: () => void;
 }) => {
   if (!itemsPerPage || data.length <= itemsPerPage) return null;
 
@@ -31,6 +35,14 @@ const PageNumbers = ({
               {i + 1}
             </li>
           )
+        )}
+        {count && fetchMore && data.length < count && (
+          <li
+            className="px-[1rem] py-[.5rem] bg-[var(--color4)] outline-[.25rem] outline-double outline-transparent m-[0.25rem] font-pulang shadow-[inset_0_0_2rem_silver] "
+            onClick={fetchMore}
+          >
+            ...
+          </li>
         )}
       </ol>
     </div>
