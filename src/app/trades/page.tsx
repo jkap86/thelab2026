@@ -3,12 +3,17 @@
 import AllTrades from "@/components/trades/all-trades";
 import FiltersModal from "@/components/trades/filters-modal";
 import LeaguemateTrades from "@/components/trades/leaguemate-trades";
+import useFetchAllPlayers from "@/hooks/common/useFetchAllplayers";
+import useFetchKtcCurrent from "@/hooks/common/useFetchKtcCurrent";
 import Link from "next/link";
 import { useState } from "react";
 
 const TradesPage = () => {
   const [tab, setTab] = useState<"All" | "Leaguemate">("All");
   const [isOpen, setIsOpen] = useState(false);
+
+  useFetchAllPlayers();
+  useFetchKtcCurrent();
 
   return (
     <div>

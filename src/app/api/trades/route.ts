@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pool";
 
+const CC = "public, max-age=120, s-maxage=1200, stale-while-revalidate=3600";
+
 const draftPickEquals = (value: string) => {
   return `(dp->>'season') || ' ' || (dp->>'round')::text || '.' 
     || COALESCE(LPAD((dp->>'order')::text, 2, '0'), 'null') 
@@ -286,8 +288,16 @@ export async function GET(req: NextRequest) {
     await pool.query(getTradesCountQuery, values)
   ).rows[0].count;
 
-  return NextResponse.json({
-    trades,
-    tradesCount,
-  });
+  return NextResponse.json(
+    {
+      trades,
+      tradesCount,
+    },
+    {
+      status: 200,
+      headers: {
+        "Cache-Control": CC,
+      },
+    }
+  );
 }

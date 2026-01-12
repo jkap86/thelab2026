@@ -20,7 +20,12 @@ const TableTrades = ({
   }, [trades]);
 
   const pageNumbers = (
-    <PageNumbers data={[]} itemsPerPage={15} page={page} setPage={setPage} />
+    <PageNumbers
+      data={trades.map((trade) => ({ id: trade.transaction_id, columns: [] }))}
+      itemsPerPage={15}
+      page={page}
+      setPage={setPage}
+    />
   );
 
   return (

@@ -1,5 +1,6 @@
 export type SleeperLeague = {
   league_id: string;
+  previous_league_id: string | null;
   name: string;
   avatar: string | null;
   roster_positions: string[] | null;

@@ -195,24 +195,21 @@ export async function updateLeagues(
             `https://api.sleeper.app/v1/league/${league_id}/users`
           );
 
-          let draftPicks, draftOrder;
+          const drafts = await axiosInstance.get(
+            `https://api.sleeper.app/v1/league/${league_id}/drafts`
+          );
+          const tradedPicks = await axiosInstance.get(
+            `https://api.sleeper.app/v1/league/${league_id}/traded_picks`
+          );
 
-          if (league.data.settings.type === 2) {
-            const drafts = await axiosInstance.get(
-              `https://api.sleeper.app/v1/league/${league_id}/drafts`
-            );
-            const tradedPicks = await axiosInstance.get(
-              `https://api.sleeper.app/v1/league/${league_id}/traded_picks`
-            );
-
-            ({ draftPicks, draftOrder } = getLeagueDraftPicks(
+          const { draftPicks, draftOrder, startupCompletionTime } =
+            getLeagueDraftPicks(
               league.data,
               rosters.data,
               users.data,
               drafts.data,
               tradedPicks.data
-            ));
-          }
+            );
 
           const rostersUsername = getRostersUsernames(
             rosters.data,
@@ -238,7 +235,8 @@ export async function updateLeagues(
             league.data,
             week,
             rostersUsername,
-            draftOrder
+            draftOrder,
+            startupCompletionTime
           );
 
           tradesToUpsert.push(...trades);
@@ -303,6 +301,14 @@ function getLeagueDraftPicks(
       draft.season === draftSeason.toString() &&
       draft.settings.rounds === league.settings.draft_rounds
   )?.draft_order;
+
+  const startupCompletionTime = league.previous_league_id
+    ? 1
+    : drafts.find(
+        (draft) =>
+          draft.status === "complete" &&
+          draft.settings.rounds > league.settings.draft_rounds
+      )?.last_picked ?? undefined;
 
   const draftPicks: { [key: number]: DraftPick[] } = {};
 
@@ -372,7 +378,7 @@ function getLeagueDraftPicks(
       }
     });
 
-  return { draftPicks, draftOrder };
+  return { draftPicks, draftOrder, startupCompletionTime };
 }
 
 function getRostersUsernames(
@@ -414,7 +420,8 @@ async function getTrades(
   league: SleeperLeague,
   week: number,
   rosters: Roster[],
-  draftOrder: { [key: string]: number } | undefined
+  draftOrder: { [key: string]: number } | undefined,
+  startupCompletionTime: number | undefined
 ) {
   if (league.settings.disable_trades) return [];
 
@@ -423,7 +430,13 @@ async function getTrades(
   );
 
   return transactions.data
-    .filter((t) => t.type === "trade")
+    .filter(
+      (t) =>
+        t.type === "trade" &&
+        t.status === "complete" &&
+        startupCompletionTime &&
+        t.status_updated > startupCompletionTime
+    )
     .map((t) => {
       const adds: { [player_id: string]: string } = {};
       const drops: { [player_id: string]: string } = {};
@@ -450,7 +463,7 @@ async function getTrades(
             )?.user_id ?? "0",
           original:
             rosters.find((roster) => roster.roster_id === draftPick.roster_id)
-              ?.user_id ?? "0",
+              ?.username ?? "Team " + draftPick,
           order,
         };
       });

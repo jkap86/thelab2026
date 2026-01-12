@@ -27,7 +27,6 @@ export default function useFetchTrades() {
         playerId4,
         leagueType1,
         offset: 0,
-        limit: 100,
       })
     );
   }, [

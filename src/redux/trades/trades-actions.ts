@@ -20,7 +20,6 @@ export const fetchTrades = createAsyncThunk<
     playerId4: string | undefined;
     leagueType1: string;
     offset: number;
-    limit: number;
 
     signal?: AbortSignal;
   },
@@ -28,16 +27,7 @@ export const fetchTrades = createAsyncThunk<
 >(
   "trades/fetchTrades",
   async (
-    {
-      playerId1,
-      playerId2,
-      playerId3,
-      playerId4,
-      leagueType1,
-      limit,
-      offset,
-      signal,
-    },
+    { playerId1, playerId2, playerId3, playerId4, leagueType1, offset, signal },
     { rejectWithValue }
   ) => {
     try {
@@ -50,12 +40,10 @@ export const fetchTrades = createAsyncThunk<
             playerId4,
             leagueType1,
             offset,
-            limit,
+            limit: 125,
           },
           signal,
         });
-
-      console.log({ response });
 
       return {
         ...response.data,
