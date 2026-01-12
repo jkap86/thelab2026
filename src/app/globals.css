@@ -38,7 +38,7 @@ body {
 
 .font-pulang {
   font-family: var(--fontPulang);
-  letter-spacing: 0.25rem;
+  letter-spacing: 0.15rem;
 }
 
 .font-chill {
@@ -148,7 +148,7 @@ select option {
 
 .text-overflow {
   text-overflow: ellipsis;
-  overflow: hidden;
+  overflow-x: hidden;
   white-space: nowrap;
   width: inherit;
 }
@@ -166,5 +166,6 @@ th.sort.icon {
 th,
 td {
   border: inset 0.2rem double transparent;
-  box-shadow: inset 0 0 2rem black;
+  box-shadow: inset 0 0 1.5rem black;
+  padding: 0rem;
 }

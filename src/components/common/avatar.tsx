@@ -57,7 +57,8 @@ const Avatar = ({
         />
         <span
           className={
-            "text-[inherit] whitespace-nowrap font-[inherit] relative z-2 text-overflow"
+            "text-[inherit] whitespace-nowrap font-[inherit] relative z-2 text-overflow w-full" +
+            (centered ? " text-center" : "")
           }
         >
           {name}
