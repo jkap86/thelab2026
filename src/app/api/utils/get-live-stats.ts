@@ -42,7 +42,7 @@ export const getLiveStats = async (
   const delay = Object.values(schedule).some(
     (game) =>
       game.is_in_progress ||
-      game.kickoff < new Date().getTime() + 1 * 60 * 60 * 1000
+      game.kickoff > new Date().getTime() - 1 * 60 * 60 * 1000
   )
     ? 10_000
     : upcomingKickoffTimes.length > 0
