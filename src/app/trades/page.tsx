@@ -11,6 +11,7 @@ import useFetchKtcCurrent from "@/hooks/common/useFetchKtcCurrent";
 import useFetchNflState from "@/hooks/common/useFetchNflState";
 import useFetchTrades from "@/hooks/trades/useFetchTrades";
 import { AppDispatch, RootState } from "@/redux/store";
+import { fetchTrades } from "@/redux/trades/trades-actions";
 import { updateTradesState } from "@/redux/trades/trades-slice";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -39,8 +40,6 @@ const TradesPage = () => {
   useFetchNflState();
   useFetchAllPlayers();
   useFetchKtcCurrent();
-
-  useFetchTrades();
 
   const playerPickOptions = useMemo(() => {
     const pick_seasons =
@@ -143,32 +142,55 @@ const TradesPage = () => {
       <div className="m-8 text-[3rem] font-metal text-[var(--color1)] text-center">
         Trades
       </div>
-      <div className="flex justify-center items-center font-score text-[1.5rem]">
-        {["All", "Leaguemate"].map((item) => (
-          <div
-            key={item}
-            className={
-              "w-[10rem] py-4  mx-8 flex justify-center items-center rounded " +
-              (tab === item ? "bg-radial-active" : "bg-radial-gray")
+      <div className="flex flex-col items-center">
+        <div className="flex justify-center items-center font-score text-[1.5rem]">
+          {["All", "Leaguemate"].map((item) => (
+            <div
+              key={item}
+              className={
+                "w-[10rem] py-4  mx-8 flex justify-center items-center rounded " +
+                (tab === item ? "bg-radial-active" : "bg-radial-gray")
+              }
+              onClick={() => setTab(item as "All" | "Leaguemate")}
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-center items-center m-16">
+          <i
+            className="fa-solid fa-filter text-[3rem] text-[var(--color1)]"
+            onClick={() => setIsOpen(true)}
+          ></i>
+        </div>
+
+        <FiltersModal
+          isOpen={isOpen}
+          setIsOpen={setIsOpen}
+          filters={{ leagueType1, leagueType2 }}
+        />
+        {searches}
+        <div>
+          <button
+            className="p-4 bg-[var(--color3)] rounded m-8"
+            onClick={() =>
+              dispatch(
+                fetchTrades({
+                  playerId1,
+                  playerId2,
+                  playerId3,
+                  playerId4,
+                  leagueType1,
+                  leagueType2,
+                  offset: trades?.trades.length || 0,
+                })
+              )
             }
-            onClick={() => setTab(item as "All" | "Leaguemate")}
           >
-            {item}
-          </div>
-        ))}
+            Search
+          </button>
+        </div>
       </div>
-      <div className="flex justify-center items-center m-16">
-        <i
-          className="fa-solid fa-filter text-[3rem] text-[var(--color1)]"
-          onClick={() => setIsOpen(true)}
-        ></i>
-      </div>
-      <FiltersModal
-        isOpen={isOpen}
-        setIsOpen={setIsOpen}
-        filters={{ leagueType1, leagueType2 }}
-      />
-      {searches}
       {playerId1 === trades?.playerId1 &&
       playerId2 === trades?.playerId2 &&
       playerId3 === trades?.playerId3 &&
