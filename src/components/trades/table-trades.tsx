@@ -15,11 +15,16 @@ const TableTrades = ({
   const [page, setPage] = useState(1);
   const [activeTrade, setActiveTrade] = useState<string | null>(null);
 
-  useEffect(() => {
-    setPage(Math.max(Math.max(Math.ceil((trades.length - 1) / 25), 5) - 4, 1));
-  }, [trades]);
-
   const itemsPerPage = 20;
+
+  useEffect(() => {
+    setPage(
+      Math.max(
+        Math.max(Math.ceil((trades.length - 1) / itemsPerPage), 5) - 4,
+        1
+      )
+    );
+  }, [trades]);
 
   const pageNumbers = (
     <PageNumbers
@@ -36,7 +41,7 @@ const TableTrades = ({
     <div>
       {tradeCount && (
         <h2 className="text-[1.5rem] font-score m-8 text-[var(--color7)]">
-          {tradeCount} trades
+          {Number(tradeCount).toLocaleString("en-US")} trades
         </h2>
       )}
       {pageNumbers}

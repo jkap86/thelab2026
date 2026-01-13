@@ -12,6 +12,7 @@ export const fetchTrades = createAsyncThunk<
     playerId3: string | undefined;
     playerId4: string | undefined;
     leagueType1: string;
+    leagueType2: string;
   },
   {
     playerId1: string | undefined;
@@ -19,6 +20,7 @@ export const fetchTrades = createAsyncThunk<
     playerId3: string | undefined;
     playerId4: string | undefined;
     leagueType1: string;
+    leagueType2: string;
     offset: number;
 
     signal?: AbortSignal;
@@ -27,7 +29,16 @@ export const fetchTrades = createAsyncThunk<
 >(
   "trades/fetchTrades",
   async (
-    { playerId1, playerId2, playerId3, playerId4, leagueType1, offset, signal },
+    {
+      playerId1,
+      playerId2,
+      playerId3,
+      playerId4,
+      leagueType1,
+      leagueType2,
+      offset,
+      signal,
+    },
     { rejectWithValue }
   ) => {
     try {
@@ -39,6 +50,7 @@ export const fetchTrades = createAsyncThunk<
             playerId3,
             playerId4,
             leagueType1,
+            leagueType2,
             offset,
             limit: 100,
           },
@@ -52,6 +64,7 @@ export const fetchTrades = createAsyncThunk<
         playerId3,
         playerId4,
         leagueType1,
+        leagueType2,
       };
     } catch (error: unknown) {
       if (["AbortError", "CanceledError"].includes((error as Error).name)) {

@@ -10,6 +10,7 @@ export interface TradesState {
     playerId3: string | undefined;
     playerId4: string | undefined;
     leagueType1: string;
+    leagueType2: string;
     count: number;
     trades: Trade[];
   } | null;
@@ -20,6 +21,7 @@ export interface TradesState {
   playerId3: string | undefined;
   playerId4: string | undefined;
   leagueType1: string;
+  leagueType2: string;
 }
 
 const initialState: TradesState = {
@@ -32,6 +34,7 @@ const initialState: TradesState = {
   playerId3: undefined,
   playerId4: undefined,
   leagueType1: "All",
+  leagueType2: "All",
 };
 
 const tradesSlice = createSlice({

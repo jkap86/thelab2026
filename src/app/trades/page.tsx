@@ -1,27 +1,46 @@
 "use client";
 
 import Avatar from "@/components/common/avatar";
+import LoadingIcon from "@/components/common/loading-icon";
+import Search from "@/components/common/search";
 import AllTrades from "@/components/trades/all-trades";
 import FiltersModal from "@/components/trades/filters-modal";
 import LeaguemateTrades from "@/components/trades/leaguemate-trades";
 import useFetchAllPlayers from "@/hooks/common/useFetchAllplayers";
 import useFetchKtcCurrent from "@/hooks/common/useFetchKtcCurrent";
 import useFetchNflState from "@/hooks/common/useFetchNflState";
-import { RootState } from "@/redux/store";
+import useFetchTrades from "@/hooks/trades/useFetchTrades";
+import { AppDispatch, RootState } from "@/redux/store";
+import { updateTradesState } from "@/redux/trades/trades-slice";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 
 const TradesPage = () => {
+  const dispatch: AppDispatch = useDispatch();
   const { allplayers, nflState } = useSelector(
     (state: RootState) => state.common
   );
+  const {
+    trades,
+    isLoadingTrades,
+    errorTrades,
+    playerId1,
+    playerId2,
+    playerId3,
+    playerId4,
+    leagueType1,
+    leagueType2,
+  } = useSelector((state: RootState) => state.trades);
+
   const [tab, setTab] = useState<"All" | "Leaguemate">("All");
   const [isOpen, setIsOpen] = useState(false);
 
   useFetchNflState();
   useFetchAllPlayers();
   useFetchKtcCurrent();
+
+  useFetchTrades();
 
   const playerPickOptions = useMemo(() => {
     const pick_seasons =
@@ -88,6 +107,34 @@ const TradesPage = () => {
     ];
   }, [allplayers, nflState]);
 
+  const searches = (
+    <div>
+      <div className="flex justify-evenly">
+        <div className=" m-auto">
+          <Search
+            searched={playerId1 ?? ""}
+            setSearched={(value) =>
+              dispatch(updateTradesState({ key: "playerId1", value }))
+            }
+            options={playerPickOptions}
+            placeholder="Player"
+          />
+        </div>
+
+        <div className="w-fit m-auto">
+          <Search
+            searched={playerId2 ?? ""}
+            setSearched={(value) =>
+              dispatch(updateTradesState({ key: "playerId2", value }))
+            }
+            options={playerPickOptions}
+            placeholder="Player 2"
+          />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <Link href={"/tools"} className="home">
@@ -116,11 +163,28 @@ const TradesPage = () => {
           onClick={() => setIsOpen(true)}
         ></i>
       </div>
-      <FiltersModal isOpen={isOpen} setIsOpen={setIsOpen} />
-      {tab === "All" ? (
-        <AllTrades playerPickOptions={playerPickOptions} />
+      <FiltersModal
+        isOpen={isOpen}
+        setIsOpen={setIsOpen}
+        filters={{ leagueType1, leagueType2 }}
+      />
+      {searches}
+      {playerId1 === trades?.playerId1 &&
+      playerId2 === trades?.playerId2 &&
+      playerId3 === trades?.playerId3 &&
+      playerId4 === trades?.playerId4 &&
+      leagueType1 === trades?.leagueType1 &&
+      !isLoadingTrades &&
+      !errorTrades ? (
+        tab === "All" ? (
+          <AllTrades playerPickOptions={playerPickOptions} />
+        ) : (
+          <LeaguemateTrades playerPickOptions={playerPickOptions} />
+        )
+      ) : isLoadingTrades ? (
+        <LoadingIcon />
       ) : (
-        <LeaguemateTrades playerPickOptions={playerPickOptions} />
+        errorTrades
       )}
     </div>
   );

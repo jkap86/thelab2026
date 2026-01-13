@@ -14,6 +14,7 @@ export default function useFetchTrades() {
     playerId3,
     playerId4,
     leagueType1,
+    leagueType2,
   } = useSelector((state: RootState) => state.trades);
 
   useEffect(() => {
@@ -23,7 +24,8 @@ export default function useFetchTrades() {
         trades.playerId2 === playerId2 &&
         trades.playerId3 === playerId3 &&
         trades.playerId4 === playerId4 &&
-        trades.leagueType1 === leagueType1) ||
+        trades.leagueType1 === leagueType1 &&
+        trades.leagueType2 === leagueType2) ||
       isLoadingTrades ||
       errorTrades
     )
@@ -36,6 +38,7 @@ export default function useFetchTrades() {
         playerId3,
         playerId4,
         leagueType1,
+        leagueType2,
         offset: 0,
       })
     );
@@ -48,6 +51,7 @@ export default function useFetchTrades() {
     playerId3,
     playerId4,
     leagueType1,
+    leagueType2,
     dispatch,
   ]);
 }

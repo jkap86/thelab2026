@@ -166,9 +166,9 @@ const Trade = ({
               </td>
               <td
                 colSpan={8}
-                className={"min-h-[5rem] " + bg + " text-[1.25rem]"}
+                className={"min-h-[5rem] " + bg + " text-[1.25rem] !py-[.5rem]"}
               >
-                <table className={bg + " text-[1.25rem] min-h-[5rem]"}>
+                <table className={bg + " text-[1.25rem] min-h-[5rem] "}>
                   <tbody>
                     {Object.keys(trade.adds)
                       .filter((add) => trade.adds[add] === user_id)
@@ -260,7 +260,7 @@ const Trade = ({
               </td>
               <td
                 colSpan={6}
-                className={"min-h-[5rem] " + bg + " text-[1.25rem]"}
+                className={"min-h-[5rem] " + bg + " text-[1.25rem] !py-[.5rem"}
               >
                 <table className={bg + " text-[1.25rem]"}>
                   <tbody>
