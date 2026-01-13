@@ -44,79 +44,89 @@ export async function GET(req: NextRequest) {
       async start(controller) {
         const sendData = async () => {
           if (isClosed) return;
-
-          const { statsArray, delay, schedule } = await getCachedLiveStats(
-            week.toString(),
-            parseInt(season),
-            seasonType as "regular" | "post"
-          );
-
-          const stats = Object.fromEntries(
-            statsArray.map((stat) => [stat.player_id, stat])
-          );
-
-          const playerPoints = Object.fromEntries(
-            rosters.flatMap((roster: [number, string[]]) => {
-              return roster[1].map((playerId: string) => [
-                playerId,
-                getPlayerPoints(scoringSettings, stats[playerId]?.stats || {}),
-              ]);
-            })
-          );
-
-          const optimalRosters = Object.fromEntries(
-            rosters.map((roster: [number, string[]]) => {
-              const { optimalStarters, optimalBench } = getOptimalStarters(
-                rosterPositions,
-                roster[1],
-                playerPoints,
-                allplayers
-              );
-
-              return [
-                roster[0],
-                {
-                  optimal_starters: optimalStarters.map((player) => ({
-                    ...player,
-                    playing: schedule[
-                      allplayers[player.optimal_player_id]?.team
-                    ]
-                      ? true
-                      : false,
-                    is_in_progress:
-                      stats[player.optimal_player_id]?.is_in_progress,
-                    result:
-                      schedule[allplayers[player.optimal_player_id]?.team]
-                        ?.result,
-                  })),
-                  optimal_bench: optimalBench.map((player) => ({
-                    ...player,
-                    playing: schedule[
-                      allplayers[player.optimal_player_id]?.team
-                    ]
-                      ? true
-                      : false,
-                    is_in_progress:
-                      stats[player.optimal_player_id]?.is_in_progress,
-                    result:
-                      schedule[allplayers[player.optimal_player_id]?.team]
-                        ?.result,
-                  })),
-                  points: optimalStarters.reduce(
-                    (acc, curr) => acc + curr.value,
-                    0
-                  ),
-                },
-              ];
-            })
-          );
-
-          if (!isClosed) {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify(optimalRosters)}\n\n`)
+          try {
+            const { statsArray, delay, schedule } = await getCachedLiveStats(
+              week.toString(),
+              parseInt(season),
+              seasonType as "regular" | "post"
             );
-            console.log({ delay });
-            timeoutId = setTimeout(sendData, delay);
+
+            const stats = Object.fromEntries(
+              statsArray.map((stat) => [stat.player_id, stat])
+            );
+
+            const playerPoints = Object.fromEntries(
+              rosters.flatMap((roster: [number, string[]]) => {
+                return roster[1].map((playerId: string) => [
+                  playerId,
+                  getPlayerPoints(
+                    scoringSettings,
+                    stats[playerId]?.stats || {}
+                  ),
+                ]);
+              })
+            );
+
+            const optimalRosters = Object.fromEntries(
+              rosters.map((roster: [number, string[]]) => {
+                const { optimalStarters, optimalBench } = getOptimalStarters(
+                  rosterPositions,
+                  roster[1],
+                  playerPoints,
+                  allplayers
+                );
+
+                return [
+                  roster[0],
+                  {
+                    optimal_starters: optimalStarters.map((player) => ({
+                      ...player,
+                      playing: schedule[
+                        allplayers[player.optimal_player_id]?.team
+                      ]
+                        ? true
+                        : false,
+                      is_in_progress:
+                        stats[player.optimal_player_id]?.is_in_progress,
+                      result:
+                        schedule[allplayers[player.optimal_player_id]?.team]
+                          ?.result,
+                    })),
+                    optimal_bench: optimalBench.map((player) => ({
+                      ...player,
+                      playing: schedule[
+                        allplayers[player.optimal_player_id]?.team
+                      ]
+                        ? true
+                        : false,
+                      is_in_progress:
+                        stats[player.optimal_player_id]?.is_in_progress,
+                      result:
+                        schedule[allplayers[player.optimal_player_id]?.team]
+                          ?.result,
+                    })),
+                    points: optimalStarters.reduce(
+                      (acc, curr) => acc + curr.value,
+                      0
+                    ),
+                  },
+                ];
+              })
+            );
+
+            if (!isClosed) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify(optimalRosters)}\n\n`)
+              );
+              console.log({ delay });
+              timeoutId = setTimeout(sendData, delay);
+            }
+          } catch (err) {
+            console.error("Error fetching stats:", err);
+            // Retry after 30 seconds on error
+            if (!isClosed) {
+              timeoutId = setTimeout(sendData, 30_000);
+            }
           }
         };
         await sendData();
