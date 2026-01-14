@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   if (leagueDb?.updated_at > CUTOFF && leagueDb.status !== "drafting")
     return NextResponse.json(leagueDb, { status: 200 });
 
-  const league = await updateLeagues([league_id], [], 1);
+  const { leaguesToUpsert } = await updateLeagues([league_id], [], 1);
 
-  return NextResponse.json(league[0], { status: 200 });
+  return NextResponse.json(leaguesToUpsert[0], { status: 200 });
 }
