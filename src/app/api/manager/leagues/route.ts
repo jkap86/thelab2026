@@ -53,9 +53,18 @@ export async function GET(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          let newUsersCount = 0;
+          let newLeaguesCount = 0;
+          let newTradesCount = 0;
+
           for (let i = 0; i < leagues.length; i += batchSize) {
             const batch = leagues.slice(i, i + batchSize);
-            const processed = await processLeagues(
+            const {
+              processed,
+              newUsersCount: newUsersCountBatch,
+              newLeaguesCount: newLeaguesCountBatch,
+              newTradesCount: newTradesCountBatch,
+            } = await processLeagues(
               batch,
               user_id,
               parseInt(week),
@@ -63,10 +72,16 @@ export async function GET(req: NextRequest) {
               allplayers as Allplayer[]
             );
 
+            newUsersCount += newUsersCountBatch;
+            newLeaguesCount += newLeaguesCountBatch;
+            newTradesCount += newTradesCountBatch;
+
             for (const league of processed) {
               controller.enqueue(encoder.encode(JSON.stringify(league) + "\n"));
             }
           }
+          console.log({ newUsersCount, newLeaguesCount, newTradesCount });
+
           controller.close();
         } catch (error: unknown) {
           if (error instanceof Error) {
@@ -131,7 +146,12 @@ async function processLeagues(
     .filter((league) => !upToDate.includes(league.league_id))
     .map((league) => league.league_id);
 
-  const updated = await updateLeagues(
+  const {
+    leaguesToUpsert: updated,
+    newUsersCount,
+    newLeaguesCount,
+    newTradesCount,
+  } = await updateLeagues(
     toUpdate,
     result.rows.map((league) => league.league_id),
     week
@@ -165,7 +185,7 @@ async function processLeagues(
     })
   );
 
-  return processed;
+  return { processed, newUsersCount, newLeaguesCount, newTradesCount };
 }
 
 export async function updateLeagues(
@@ -266,11 +286,13 @@ export async function updateLeagues(
   try {
     await pool.query("BEGIN");
 
-    await upsertUsers(usersToUpsert);
-    await upsertLeagues(leaguesToUpsert);
-    await upsertTrades(tradesToUpsert);
+    const newUsersCount = await upsertUsers(usersToUpsert);
+    const newLeaguesCount = await upsertLeagues(leaguesToUpsert);
+    const newTradesCount = await upsertTrades(tradesToUpsert);
 
     await pool.query("COMMIT");
+
+    return { leaguesToUpsert, newUsersCount, newLeaguesCount, newTradesCount };
   } catch (err: unknown) {
     if (err instanceof Error) {
       console.log(err.message);
@@ -279,9 +301,14 @@ export async function updateLeagues(
     }
 
     await pool.query("ROLLBACK");
-  }
 
-  return leaguesToUpsert;
+    return {
+      leaguesToUpsert,
+      newUsersCount: 0,
+      newLeaguesCount: 0,
+      newTradesCount: 0,
+    };
+  }
 }
 
 function getLeagueDraftPicks(
@@ -524,7 +551,7 @@ async function getTrades(
 }
 
 async function upsertUsers(users: User[]) {
-  if (users.length === 0) return;
+  if (users.length === 0) return 0;
 
   const upsertUsersQuery = `
     INSERT INTO users (user_id, username, avatar, type)
@@ -549,13 +576,13 @@ async function upsertUsers(users: User[]) {
     user.type,
   ]);
 
-  await pool.query(upsertUsersQuery, values);
+  const upserted = await pool.query(upsertUsersQuery, values);
 
-  return;
+  return upserted.rowCount ?? 0;
 }
 
 async function upsertLeagues(leagues: League[]) {
-  if (leagues.length === 0) return;
+  if (leagues.length === 0) return 0;
 
   const upserLeaguesQuery = `
     INSERT INTO leagues (league_id, name, avatar, season, status, settings, scoring_settings, roster_positions, rosters)
@@ -587,13 +614,13 @@ async function upsertLeagues(leagues: League[]) {
     JSON.stringify(league.rosters),
   ]);
 
-  await pool.query(upserLeaguesQuery, values);
+  const upserted = await pool.query(upserLeaguesQuery, values);
 
-  return;
+  return upserted.rowCount ?? 0;
 }
 
 async function upsertTrades(trades: Trade[]) {
-  if (trades.length === 0) return;
+  if (trades.length === 0) return 0;
 
   const upsertTradesQuery = `
     INSERT INTO trades (transaction_id, status_updated, league_id, adds, drops, draft_picks, rosters)
@@ -617,7 +644,7 @@ async function upsertTrades(trades: Trade[]) {
     JSON.stringify(trade.rosters),
   ]);
 
-  await pool.query(upsertTradesQuery, values);
+  const upserted = await pool.query(upsertTradesQuery, values);
 
-  return;
+  return upserted.rowCount ?? 0;
 }

@@ -33,7 +33,11 @@ export async function getKtcCurrent() {
   `;
 
   const result = await pool.query(query);
-  const { latest_date, last_updated, player_values } = result.rows[0];
+  const { latest_date, last_updated, player_values } = result.rows[0] ?? {
+    latest_date: 0,
+    last_updated: 0,
+    player_values: {},
+  };
 
   return {
     latest_date,

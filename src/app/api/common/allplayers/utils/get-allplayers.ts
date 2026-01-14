@@ -4,6 +4,8 @@ import { Allplayer } from "@/lib/types/common-types";
 
 const TWELVE_HOURS = 1000 * 60 * 60 * 12;
 
+const positions = ["QB", "RB", "FB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"];
+
 // Cheap query - get timestamp and freshness for ETag check
 export async function getAllplayersEtagInfo() {
   const result = await pool.query(
@@ -41,7 +43,12 @@ export async function refreshAllplayers(): Promise<Allplayer[]> {
   const allplayers: Allplayer[] = [];
 
   Object.values(response.data)
-    .filter((player) => player.active && player.fantasy_positions?.length > 0)
+    .filter(
+      (player) =>
+        player.active &&
+        player.fantasy_positions?.length > 0 &&
+        positions.includes(player.position)
+    )
     .forEach((player) => {
       const {
         player_id,
