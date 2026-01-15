@@ -26,6 +26,17 @@ export async function GET(req: NextRequest) {
   const limit = searchParams.get("limit");
   const offset = searchParams.get("offset");
 
+  console.log({
+    playerId1,
+    playerId2,
+    playerId3,
+    playerId4,
+    leagueType1,
+    leagueType2,
+    limit,
+    offset,
+  });
+
   const conditions: string[] = [
     `(SELECT count(*) FROM jsonb_each(t.adds)) <= 10`,
   ];
@@ -55,13 +66,13 @@ export async function GET(req: NextRequest) {
         conditions.push(
           `
             (
-                SELECT dp1->>'new'
-                FROM jsonb_array_elements(t.draft_picks) as dp1
+                SELECT dp->>'new'
+                FROM jsonb_array_elements(t.draft_picks) as dp
                 WHERE ${draftPickEquals("$1")}
                 LIMIT 1
             ) != (
-                SELECT dp2->>'new'
-                FROM jsonb_array_elements(t.draft_picks) as dp2
+                SELECT dp->>'new'
+                FROM jsonb_array_elements(t.draft_picks) as dp
                 WHERE ${draftPickEquals(`$${values.length + 1}`)}
                 LIMIT 1
             )
@@ -96,9 +107,8 @@ export async function GET(req: NextRequest) {
         conditions.push(`t.adds ? $${values.length + 1}`);
         conditions.push(`t.adds ->> $1 != t.adds ->> $${values.length + 1}`);
       }
-
-      values.push(playerId2);
     }
+    values.push(playerId2);
   }
 
   if (playerId3) {
@@ -113,8 +123,8 @@ export async function GET(req: NextRequest) {
               LIMIT 1
             )
             SELECT
-              (SELECT count(*) FROM jsonb_array_elements(t.draft_picks) dp2
-              WHERE dp2->>'new' IS NOT DISTINCT FROM (SELECT new_val FROM pick)
+              (SELECT count(*) FROM jsonb_array_elements(t.draft_picks) dp
+              WHERE dp->>'new' IS NOT DISTINCT FROM (SELECT new_val FROM pick)
               ) = 1
               AND NOT EXISTS (
                 SELECT 1
@@ -195,8 +205,8 @@ export async function GET(req: NextRequest) {
               LIMIT 1
             )
             SELECT
-              (SELECT count(*) FROM jsonb_array_elements(t.draft_picks) dp2
-              WHERE dp2->>'new' IS NOT DISTINCT FROM (SELECT new_val FROM pick)
+              (SELECT count(*) FROM jsonb_array_elements(t.draft_picks) dp
+              WHERE dp->>'new' IS NOT DISTINCT FROM (SELECT new_val FROM pick)
               ) = 1
               AND NOT EXISTS (
                 SELECT 1

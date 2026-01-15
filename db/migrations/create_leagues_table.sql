@@ -11,3 +11,7 @@ CREATE TABLE IF NOT EXISTS leagues (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_leagues_settings_type ON leagues ((settings ->> 'type'));
+
+CREATE INDEX IF NOT EXISTS idx_leagues_settings_best_ball ON leagues ((settings ->> 'best_ball'));

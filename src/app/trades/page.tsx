@@ -14,7 +14,7 @@ import { AppDispatch, RootState } from "@/redux/store";
 import { fetchTrades } from "@/redux/trades/trades-actions";
 import { updateTradesState } from "@/redux/trades/trades-slice";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 const TradesPage = () => {
@@ -40,6 +40,34 @@ const TradesPage = () => {
   useFetchNflState();
   useFetchAllPlayers();
   useFetchKtcCurrent();
+
+  useEffect(() => {
+    if (!playerId1 && playerId3) {
+      dispatch(
+        updateTradesState({
+          key: "playerId1",
+          value: playerId3 === "Price Check" ? "" : playerId3,
+        })
+      );
+
+      if (playerId3 !== "Price Check")
+        dispatch(updateTradesState({ key: "playerId3", value: "" }));
+    }
+  }, [playerId1, playerId3]);
+
+  useEffect(() => {
+    if (!playerId2 && playerId4) {
+      dispatch(
+        updateTradesState({
+          key: "playerId2",
+          value: playerId4 === "Price Check" ? "" : playerId4,
+        })
+      );
+
+      if (playerId4 !== "Price Check")
+        dispatch(updateTradesState({ key: "playerId4", value: "" }));
+    }
+  }, [playerId2, playerId4]);
 
   const playerPickOptions = useMemo(() => {
     const pick_seasons =
@@ -229,7 +257,15 @@ const TradesPage = () => {
                   playerId4,
                   leagueType1,
                   leagueType2,
-                  offset: trades?.trades.length || 0,
+                  offset:
+                    playerId1 === trades?.playerId1 &&
+                    playerId2 === trades?.playerId2 &&
+                    playerId3 === trades?.playerId3 &&
+                    playerId4 === trades?.playerId4 &&
+                    leagueType1 === trades?.leagueType1 &&
+                    leagueType2 === trades?.leagueType2
+                      ? trades.trades.length
+                      : 0,
                 })
               )
             }

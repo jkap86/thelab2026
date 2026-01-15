@@ -130,7 +130,7 @@ const Search = ({
 
       {isOpen && (
         <List
-          className="bg-[var(--color5)] outline-double outline-[var(--color3)] outline-[.5rem] my-[.5rem] !absolute top-full z-12 shadow-[0_0_1.5rem_white] w-full rounded "
+          className="bg-[var(--color5)] outline-double outline-[var(--color3)] outline-[.5rem] my-[.5rem] !absolute top-full z-14 shadow-[0_0_1.5rem_white] w-full rounded "
           height={MAX_MENU_HEIGHT}
           itemCount={searchOptions.length}
           itemSize={ROW_HEIGHT}
