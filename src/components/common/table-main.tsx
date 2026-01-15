@@ -194,14 +194,13 @@ const TableMain = ({
               <tr
                 key={row.id}
                 className={
-                  (active === row.id ? "bg-radial-active " : "") +
-                  (half && active === row.id
+                  half && active === row.id
                     ? type === 2
                       ? "sticky top-[15rem] z-6"
                       : type === 3
                       ? "sticky top-[25rem] z-3"
                       : ""
-                    : "")
+                    : ""
                 }
               >
                 <td

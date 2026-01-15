@@ -136,9 +136,9 @@ const TradesPage = () => {
 
   const searches = (
     <div>
-      <div className="flex justify-evenly">
-        <div className=" mx-auto h-full">
-          <div className="p-4">
+      <div className="flex justify-evenly w-full">
+        <div className=" mx-auto h-full w-[45%]">
+          <div className="h-[3rem]">
             <Search
               searched={playerId1 ?? ""}
               setSearched={(value) =>
@@ -154,7 +154,7 @@ const TradesPage = () => {
             />
           </div>
           {playerId1 && (
-            <div className="p-4">
+            <div className="h-[3rem]">
               <Search
                 searched={playerId3 ?? ""}
                 setSearched={(value) =>
@@ -171,8 +171,8 @@ const TradesPage = () => {
           )}
         </div>
 
-        <div className=" mx-auto h-full">
-          <div className="p-4">
+        <div className=" mx-auto h-full w-[45%]">
+          <div className="h-[3rem]">
             <Search
               searched={playerId2 ?? ""}
               setSearched={(value) =>
@@ -189,7 +189,7 @@ const TradesPage = () => {
             />
           </div>
           {playerId2 && (
-            <div className="p-4">
+            <div className="h-[3rem]">
               <Search
                 searched={playerId4 ?? ""}
                 setSearched={(value) =>

@@ -90,20 +90,22 @@ const Search = ({
   }, [searchText, options]);
 
   const buttonClassName =
-    "w-[10%] h-full top-0 absolute right-[0%]  text-[2rem] flex justify-center items-center z-13";
+    "w-[10%] h-full absolute right-[0%]  text-[2rem] flex justify-center items-center z-13 ";
 
   return (
     <div
-      className="flex flex-col justify-center items-center w-full h-full relative shadow-[0_0_1.5rem_white]"
+      className={
+        "flex flex-col justify-center items-center w-full h-full relative shadow-[0_0_1.5rem_white] " +
+        (disabled ? " opacity-[.5]" : "")
+      }
       ref={searchRef}
     >
-      <div className="relative h-full flex justify-center items-center">
+      <div className="relative h-full w-full flex justify-center items-center">
         <input
           className={
-            "text-black text-[2rem] w-full h-full bg-[var(--color1)] text-center " +
+            "text-black text-[2rem] bg-[var(--color1)] text-center " +
             "outline-double outline-[var(--color3)] outline-[.5rem] rounded " +
-            "shadow-[inset_0_0_2.5rem_black] placeholder:opacity-50 relative z-13   text-overflow " +
-            (disabled ? " opacity-[.25]" : "")
+            "shadow-[inset_0_0_2.5rem_black] placeholder:opacity-50 relative z-13   text-overflow "
           }
           type="text"
           value={searchText}
@@ -148,7 +150,7 @@ const Search = ({
                 key={`${option.id}`}
                 style={style}
                 onClick={() => handleSearch(data[index].text)}
-                className="shadow-[inset_0_0_2rem_black] text-[1.5rem] text-overflow px-2"
+                className="shadow-[inset_0_0_2rem_black] text-[1.5rem] text-overflow px-2 flex items-center hover:bg-[var(--color3)] cursor-pointer list-none h-full font-score text-[1.75rem]"
               >
                 {data[index].display}
               </li>

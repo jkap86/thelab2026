@@ -116,7 +116,7 @@ const PlayerLeagues = ({
       columns: [
         {
           text: (
-            <div className="h-full font-chill">
+            <div className="h-full font-chill text-[1.75rem] p-2">
               <Avatar
                 avatar_id={league.avatar}
                 type="league"
@@ -132,7 +132,7 @@ const PlayerLeagues = ({
           ? [
               {
                 text: (
-                  <div className="font-chill">
+                  <div className="font-chill h-full text-[1.75rem] p-2">
                     <Avatar
                       avatar_id={lmRoster?.avatar ?? null}
                       type="user"

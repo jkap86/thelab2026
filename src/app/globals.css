@@ -104,6 +104,14 @@ input {
   font-size: max(20px, inherit);
 }
 
+select {
+  text-align-last: center;
+}
+
+input[type="text"] {
+  font-size: 20px;
+}
+
 table {
   table-layout: fixed;
   width: 100%;

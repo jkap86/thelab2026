@@ -132,7 +132,7 @@ export default function PlayersPage({
       columns: [
         {
           text: (
-            <div className="h-full font-chill">
+            <div className="h-full font-chill text-[1.75rem] p-2">
               {isPick ? (
                 name
               ) : (

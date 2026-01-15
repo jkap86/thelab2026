@@ -62,10 +62,10 @@ const Heading = () => {
                 .toLowerCase()}`
             )
           }
-          className="text-[1.5rem] text-center font-hugmate text-[var(--color1)]"
+          className="text-[1.5rem] !text-center font-hugmate text-[var(--color1)]"
         >
           {["LEAGUES", "PLAYERS", "LEAGUEMATES"].map((option) => (
-            <option key={option} value={option}>
+            <option key={option} value={option} className="text-center">
               {option}
             </option>
           ))}

@@ -19,7 +19,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
     abbrev: "KTC S Rk",
     desc: "KeepTradeCut total optimal starters value rank.",
     key: "optimal_starters_ktc_rank",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -33,7 +33,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
     abbrev: "KTC B Rk",
     desc: "KeepTradeCut total optimal bench value rank.",
     key: "optimal_bench_ktc_rank",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -47,7 +47,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
     abbrev: "KTC QB S Rk",
     desc: "KeepTradeCut total optimal qb starters value rank",
     key: "optimal_qb_starters_ktc_rank",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -61,7 +61,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
     abbrev: "KTC QB B Rk",
     desc: "KeepTradeCut total optimal qb bench value rank",
     key: "optimal_qb_bench_ktc_rank",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -75,7 +75,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
     abbrev: "KTC RB S Rk",
     desc: "KeepTradeCut total optimal rb starters value rank",
     key: "optimal_rb_starters_ktc_rank",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -89,7 +89,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
     abbrev: "KTC RB B Rk",
     desc: "KeepTradeCut total optimal rb bench value rank",
     key: "optimal_rb_bench_ktc_rank",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -103,7 +103,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
     abbrev: "KTC WR S Rk",
     desc: "KeepTradeCut total optimal wr starters value rank",
     key: "optimal_wr_starters_ktc_rank",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -117,7 +117,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
     abbrev: "KTC WR B Rk",
     desc: "KeepTradeCut total optimal wr bench value rank",
     key: "optimal_wr_bench_ktc_rank",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -131,7 +131,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
     abbrev: "KTC TE S Rk",
     desc: "KeepTradeCut total optimal te starters value rank",
     key: "optimal_te_starters_ktc_rank",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -145,7 +145,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
     abbrev: "KTC TE B Rk",
     desc: "KeepTradeCut total optimal te bench value rank",
     key: "optimal_te_bench_ktc_rank",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -164,7 +164,7 @@ export const playersColumnOptions: ColumnOption[] = [
     abbrev: "# Own",
     desc: "",
     key: "num_own",
-    className: "font-metal text-[2rem]",
+    className: "font-metal text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -178,7 +178,7 @@ export const playersColumnOptions: ColumnOption[] = [
     abbrev: "KTC D",
     desc: "KeepTradeCut Dynasty Value",
     key: "ktc_d",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.25rem]",
     style: (
       value: number,
       min: number,
@@ -192,7 +192,7 @@ export const playersColumnOptions: ColumnOption[] = [
     abbrev: "Age",
     desc: "Player age",
     key: "age",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.5rem]",
     style: (
       value: number,
       min: number,
@@ -206,7 +206,7 @@ export const playersColumnOptions: ColumnOption[] = [
     abbrev: "Draft Class",
     desc: "The year player was drafted.",
     key: "draft_class",
-    className: "font-pulang text-[2rem]",
+    className: "font-pulang text-[2.25rem]",
     style: (
       value: number,
       min: number,
