@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS logs (
+    ip INET NOT NULL,
+    route TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW ()
+);
