@@ -82,7 +82,7 @@ const TradesPage = () => {
       {
         id: "Price Check",
         text: "$$ Price Check",
-        display: <>$$ Price Check</>,
+        display: <div>$$ Price Check</div>,
       },
     ];
 
@@ -109,26 +109,73 @@ const TradesPage = () => {
   const searches = (
     <div>
       <div className="flex justify-evenly">
-        <div className=" m-auto">
-          <Search
-            searched={playerId1 ?? ""}
-            setSearched={(value) =>
-              dispatch(updateTradesState({ key: "playerId1", value }))
-            }
-            options={playerPickOptions}
-            placeholder="Player"
-          />
+        <div className=" mx-auto h-full">
+          <div className="p-4">
+            <Search
+              searched={playerId1 ?? ""}
+              setSearched={(value) =>
+                dispatch(updateTradesState({ key: "playerId1", value }))
+              }
+              options={playerPickOptions.filter(
+                (option) =>
+                  !["Price Check", playerId2, playerId3, playerId4].includes(
+                    option.id
+                  )
+              )}
+              placeholder="Player/Pick"
+            />
+          </div>
+          {playerId1 && (
+            <div className="p-4">
+              <Search
+                searched={playerId3 ?? ""}
+                setSearched={(value) =>
+                  dispatch(updateTradesState({ key: "playerId3", value }))
+                }
+                options={playerPickOptions.filter(
+                  (option) =>
+                    ![playerId1, playerId2, playerId4].includes(option.id)
+                )}
+                placeholder="Player/Pick"
+                disabled={!playerId1}
+              />
+            </div>
+          )}
         </div>
 
-        <div className="w-fit m-auto">
-          <Search
-            searched={playerId2 ?? ""}
-            setSearched={(value) =>
-              dispatch(updateTradesState({ key: "playerId2", value }))
-            }
-            options={playerPickOptions}
-            placeholder="Player 2"
-          />
+        <div className=" mx-auto h-full">
+          <div className="p-4">
+            <Search
+              searched={playerId2 ?? ""}
+              setSearched={(value) =>
+                dispatch(updateTradesState({ key: "playerId2", value }))
+              }
+              options={playerPickOptions.filter(
+                (option) =>
+                  !["Price Check", playerId1, playerId3, playerId4].includes(
+                    option.id
+                  )
+              )}
+              placeholder="Player/Pick"
+              disabled={!playerId1}
+            />
+          </div>
+          {playerId2 && (
+            <div className="p-4">
+              <Search
+                searched={playerId4 ?? ""}
+                setSearched={(value) =>
+                  dispatch(updateTradesState({ key: "playerId4", value }))
+                }
+                options={playerPickOptions.filter(
+                  (option) =>
+                    ![playerId1, playerId2, playerId3].includes(option.id)
+                )}
+                placeholder="Player/Pick"
+                disabled={!playerId2}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -157,7 +204,7 @@ const TradesPage = () => {
             </div>
           ))}
         </div>
-        <div className="flex justify-center items-center m-16">
+        <div className="flex justify-center items-center m-8">
           <i
             className="fa-solid fa-filter text-[3rem] text-[var(--color1)]"
             onClick={() => setIsOpen(true)}

@@ -115,6 +115,7 @@ table {
 select option {
   background-color: black;
   color: white;
+  text-align: center;
 }
 
 .bg-radial-gray {

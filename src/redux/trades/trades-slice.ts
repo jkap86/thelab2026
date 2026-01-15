@@ -64,7 +64,8 @@ const tradesSlice = createSlice({
           state.trades.playerId2 === action.payload.playerId2 &&
           state.trades.playerId3 === action.payload.playerId3 &&
           state.trades.playerId4 === action.payload.playerId4 &&
-          state.trades.leagueType1 === action.payload.leagueType1
+          state.trades.leagueType1 === action.payload.leagueType1 &&
+          state.trades.leagueType2 === action.payload.leagueType2
         ) {
           state.trades.trades = [
             ...state.trades.trades,

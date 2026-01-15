@@ -58,7 +58,7 @@ const Search = ({
 
   const formatSearch = (text: string) => {
     return text
-      .replace(/[^a-zA-Z0-9]/g, "")
+      .replace(/[^a-zA-Z0-9.$]/g, "")
       .toLowerCase()
       .trim();
   };

@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
   const playerId3 = searchParams.get("playerId3");
   const playerId4 = searchParams.get("playerId4");
   const leagueType1 = searchParams.get("leagueType1");
+  const leagueType2 = searchParams.get("leagueType2");
   const limit = searchParams.get("limit");
   const offset = searchParams.get("offset");
 
@@ -267,6 +268,12 @@ export async function GET(req: NextRequest) {
     conditions.push(`l.settings ->> 'type' = $${values.length + 1}`);
 
     values.push(leagueType1);
+  }
+
+  if (leagueType2 !== "All") {
+    conditions.push(`l.settings ->> 'best_ball' = $${values.length + 1}`);
+
+    values.push(leagueType2);
   }
 
   const getTradesQuery = `
