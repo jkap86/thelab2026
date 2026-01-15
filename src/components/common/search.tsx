@@ -95,17 +95,17 @@ const Search = ({
   return (
     <div
       className={
-        "flex flex-col justify-center items-center w-full h-full relative shadow-[0_0_1.5rem_white] " +
+        "flex flex-col justify-center items-center w-full relative shadow-[0_0_1.5rem_white] " +
         (disabled ? " opacity-[.5]" : "")
       }
       ref={searchRef}
     >
-      <div className="relative h-full w-full flex justify-center items-center">
+      <div className="relative  w-full flex justify-center items-center">
         <input
           className={
-            "text-black text-[2rem] bg-[var(--color1)] text-center " +
+            "text-black !text-[2rem] bg-[var(--color1)] text-center " +
             "outline-double outline-[var(--color3)] outline-[.5rem] rounded " +
-            "shadow-[inset_0_0_2.5rem_black] placeholder:opacity-50 relative z-13   text-overflow "
+            "shadow-[inset_0_0_2.5rem_black] placeholder:opacity-50 relative z-13 text-overflow px-[10%]"
           }
           type="text"
           value={searchText}
