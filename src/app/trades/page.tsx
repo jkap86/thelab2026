@@ -154,7 +154,7 @@ const TradesPage = () => {
             />
           </div>
           {playerId1 && (
-            <div className="h-[3rem]">
+            <div className="h-[3rem] my-[2rem]">
               <Search
                 searched={playerId3 ?? ""}
                 setSearched={(value) =>
@@ -189,7 +189,7 @@ const TradesPage = () => {
             />
           </div>
           {playerId2 && (
-            <div className="h-[3rem]">
+            <div className="h-[3rem] my-[2rem]">
               <Search
                 searched={playerId4 ?? ""}
                 setSearched={(value) =>
