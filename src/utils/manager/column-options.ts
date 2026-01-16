@@ -227,7 +227,7 @@ export const teamsColumnOptions: ColumnOption[] = [
     abbrev: "KTC S",
     desc: "KeepTradeCut total optimal starters value",
     key: "optimal_starters_ktc_total",
-    className: "font-pulang text-[1.1rem]",
+    className: "font-pulang text-[1.25rem]",
     style: (
       value: number,
       min: number,
@@ -241,7 +241,7 @@ export const teamsColumnOptions: ColumnOption[] = [
     abbrev: "KTC B",
     desc: "KeepTradeCut total optimal bench value",
     key: "optimal_bench_ktc_total",
-    className: "font-pulang text-[1.1rem]",
+    className: "font-pulang text-[1.25rem]",
     style: (
       value: number,
       min: number,

@@ -107,18 +107,18 @@ const League = ({
             sort: true,
           },
         ]}
-        data={[...league.rosters].map((roster, rowIndex) => {
+        data={[...league.rosters].map((roster) => {
           return {
             id: roster.roster_id.toString(),
             columns: [
               {
                 text: <div>INDEX</div>,
                 colspan: 1,
-                className: "font-chill text-center",
+                className: "font-chill text-center text-[1.25rem]",
               },
               {
                 text: (
-                  <div className="font-chill">
+                  <div className="font-chill text-[1.75rem]">
                     <Avatar
                       avatar_id={roster.avatar}
                       type="user"

@@ -42,7 +42,7 @@ export const getLeagueTotals = (leagues: League[]) => {
       });
 
       if (roster.roster_id === league.user_roster_id) {
-        roster.draftpicks.forEach((draftpick) => {
+        roster.draftPicks.forEach((draftpick) => {
           const pickId = getDraftPickId(draftpick);
 
           if (!playershares[pickId]) {
