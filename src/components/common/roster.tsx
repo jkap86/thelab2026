@@ -308,7 +308,12 @@ const Roster = ({
                 {
                   text: (
                     <div className="font-chill">
-                      {getDraftPickDisplayText(pickId)}
+                      {getDraftPickDisplayText(
+                        pickId,
+                        pick.roster_id !== roster.roster_id
+                          ? pick.original_username
+                          : undefined
+                      )}
                     </div>
                   ),
                   colspan: 4,

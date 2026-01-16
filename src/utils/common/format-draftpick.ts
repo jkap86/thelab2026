@@ -10,7 +10,10 @@ export const getDraftPickId = (draftPick: DraftPick) => {
   return `${draftPick.season} ${draftPick.round}.${order}`;
 };
 
-export const getDraftPickDisplayText = (pickId: string) => {
+export const getDraftPickDisplayText = (
+  pickId: string,
+  originalUsername?: string
+) => {
   let displayText = pickId;
 
   if (pickId.endsWith(".undefined")) {
@@ -19,7 +22,9 @@ export const getDraftPickDisplayText = (pickId: string) => {
     const season = pickArray[0];
     const round = pickArray[1].split(".")[0];
 
-    displayText = `${season} Round ${round}`;
+    displayText =
+      `${season} Round ${round}` +
+      (originalUsername ? ` (${originalUsername})` : "");
   }
 
   return displayText;
