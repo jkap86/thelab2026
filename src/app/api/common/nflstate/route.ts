@@ -50,8 +50,8 @@ export async function GET(req: Request) {
       const nflState: NflState = {
         ...response.data,
         season: parseInt(process.env.SEASON!),
-        week:
-          process.env.SEASON! === response.data.season ? response.data.week : 1,
+        leg:
+          process.env.SEASON! === response.data.season ? response.data.leg : 1,
       };
 
       await pool.query(

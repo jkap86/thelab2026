@@ -92,22 +92,22 @@ export async function GET(req: NextRequest) {
             return [
               roster[0],
               {
-                optimal_starters: optimalStarters.map((player) => ({
-                  ...player,
-                  playing: schedule[allplayers[player.optimal_player_id].team]
-                    ? true
-                    : false,
-                  result:
-                    schedule[allplayers[player.optimal_player_id].team]?.result,
-                })),
-                optimal_bench: optimalBench.map((player) => ({
-                  ...player,
-                  playing: schedule[allplayers[player.optimal_player_id].team]
-                    ? true
-                    : false,
-                  result:
-                    schedule[allplayers[player.optimal_player_id].team]?.result,
-                })),
+                optimal_starters: optimalStarters.map((player) => {
+                  const team = allplayers[player.optimal_player_id]?.team;
+                  return {
+                    ...player,
+                    playing: team ? !!schedule[team] : false,
+                    result: team ? schedule[team]?.result : undefined,
+                  };
+                }),
+                optimal_bench: optimalBench.map((player) => {
+                  const team = allplayers[player.optimal_player_id]?.team;
+                  return {
+                    ...player,
+                    playing: team ? !!schedule[team] : false,
+                    result: team ? schedule[team]?.result : undefined,
+                  };
+                }),
                 points: optimalStarters.reduce(
                   (acc, curr) => acc + curr.value,
                   0
@@ -126,6 +126,7 @@ export async function GET(req: NextRequest) {
       headers: { "Cache-Control": CC },
     });
   } catch (e) {
+    console.error("completed-scores error:", e);
     return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
   }
 }

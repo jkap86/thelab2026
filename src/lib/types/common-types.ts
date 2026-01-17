@@ -90,6 +90,7 @@ export type ADPFilters = {
   rosterSlots?: string;
   scoring?: string;
   superflex?: boolean;
+  teams?: number;
 };
 
 export type OptimalPlayer = {

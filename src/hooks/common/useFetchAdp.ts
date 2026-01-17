@@ -26,7 +26,7 @@ export default function useFetchAdp() {
     if (hasRedraft || redraftFetchedRef.current) return;
 
     redraftFetchedRef.current = true;
-    dispatch(fetchADP({ key: "redraft", filters: { leagueType: "0", draftType: "snake", superflex: true, startDate } }));
+    dispatch(fetchADP({ key: "redraft", filters: { leagueType: "0", draftType: "snake", superflex: true, teams: 12, startDate } }));
   }, [hasRedraft, dispatch, startDate]);
 
   // Fetch dynasty ADP
@@ -34,6 +34,6 @@ export default function useFetchAdp() {
     if (hasDynasty || dynastyFetchedRef.current) return;
 
     dynastyFetchedRef.current = true;
-    dispatch(fetchADP({ key: "dynasty", filters: { leagueType: "2", draftType: "snake", superflex: true, startDate } }));
+    dispatch(fetchADP({ key: "dynasty", filters: { leagueType: "2", draftType: "snake", superflex: true, teams: 12, startDate } }));
   }, [hasDynasty, dispatch, startDate]);
 }

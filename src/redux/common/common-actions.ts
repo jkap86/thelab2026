@@ -116,6 +116,7 @@ export const fetchADP = createAsyncThunk<
       if (filters.rosterSlots) params.set("rosterSlots", filters.rosterSlots);
       if (filters.scoring) params.set("scoring", filters.scoring);
       if (filters.superflex) params.set("superflex", "true");
+      if (filters.teams) params.set("teams", String(filters.teams));
     }
 
     const queryString = params.toString();

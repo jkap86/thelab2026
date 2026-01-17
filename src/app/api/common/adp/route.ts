@@ -6,6 +6,7 @@ const CC = "public, max-age=300, s-maxage=1200, stale-while-revalidate=3600";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
+  const teamsParam = searchParams.get("teams");
   const filters = {
     startDate: searchParams.get("startDate") ?? undefined,
     endDate: searchParams.get("endDate") ?? undefined,
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
     rosterSlots: searchParams.get("rosterSlots") ?? undefined,
     scoring: searchParams.get("scoring") ?? undefined,
     superflex: searchParams.get("superflex") === "true" ? true : undefined,
+    teams: teamsParam ? parseInt(teamsParam, 10) : undefined,
   };
 
   try {

@@ -74,8 +74,8 @@ export default function PlayoffsPage({
     ) => {
       const res = await axiosInstance.get("/api/playoffs/completed-scores", {
         params: {
-          season,
-          season_type: "regular",
+          season: "2025",
+          season_type: "post",
           weeks: JSON.stringify(completedWeeks),
           rosters: JSON.stringify(
             rosters.map((roster) => [roster.roster_id, roster.players ?? []])
@@ -89,10 +89,10 @@ export default function PlayoffsPage({
     };
 
     const completedWeeks = Object.keys(rounds).filter(
-      (round) => parseInt(round) < nflState.leg - 17
+      (round) => parseInt(round) < nflState.week
     );
 
-    setSelectedRounds([...completedWeeks, (nflState.leg - 17).toString()]);
+    setSelectedRounds([...completedWeeks, nflState.week.toString()]);
 
     if (completedWeeks.length > 0) {
       fetchCompletedWeeks(
@@ -111,7 +111,7 @@ export default function PlayoffsPage({
     const params = new URLSearchParams({
       season: "2025",
       season_type: "post",
-      week: (nflState.leg - 17).toString(),
+      week: nflState.week.toString(),
       rosters: JSON.stringify(
         league.rosters.map((roster) => [roster.roster_id, roster.players ?? []])
       ),
@@ -125,7 +125,7 @@ export default function PlayoffsPage({
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      setLiveScores({ [(nflState.leg - 17).toString()]: data });
+      setLiveScores({ [nflState.week.toString()]: data });
     };
 
     eventSource.onerror = () => {

@@ -100,11 +100,36 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
     leagueConditions.push(`qb_count + super_flex_count = 2`);
   }
 
+  // Teams filter (on leagues)
+  if (filters?.teams) {
+    values.push(filters.teams);
+    leagueConditions.push(`jsonb_array_length(rosters) = $${values.length}`);
+  }
+
   // Build query with CTE to filter leagues first
   const leagueWhere =
     leagueConditions.length > 0
       ? `WHERE ${leagueConditions.join(" AND ")}`
       : "";
+
+  // Build round.pick format if teams specified
+  // Round average to integer first to ensure valid round.pick (no 2.13 in 12-team)
+  // Cast to numeric for ROUND(..., 2) to ensure .10 not .1 for pick 10
+  const teams = filters?.teams;
+  const avgPickExpr = teams
+    ? `ROUND(((FLOOR((ROUND(AVG(dp.pick_no)) - 1) / ${teams}) + 1) +
+       ((ROUND(AVG(dp.pick_no)) - 1) % ${teams} + 1) / 100.0)::numeric, 2)`
+    : `ROUND(AVG(dp.pick_no)::numeric, 2)`;
+
+  const minPickExpr = teams
+    ? `ROUND(((FLOOR((MIN(dp.pick_no) - 1) / ${teams}) + 1) +
+       ((MIN(dp.pick_no) - 1) % ${teams} + 1) / 100.0)::numeric, 2)`
+    : `MIN(dp.pick_no)`;
+
+  const maxPickExpr = teams
+    ? `ROUND(((FLOOR((MAX(dp.pick_no) - 1) / ${teams}) + 1) +
+       ((MAX(dp.pick_no) - 1) % ${teams} + 1) / 100.0)::numeric, 2)`
+    : `MAX(dp.pick_no)`;
 
   const query = `
     WITH filtered_leagues AS (
@@ -114,9 +139,9 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
     )
     SELECT
       dp.player_id,
-      ROUND(AVG(dp.pick_no)::numeric, 2)::float as avg_pick,
-      MIN(dp.pick_no)::int as min_pick,
-      MAX(dp.pick_no)::int as max_pick,
+      ${avgPickExpr} as avg_pick,
+      ${minPickExpr} as min_pick,
+      ${maxPickExpr} as max_pick,
       ROUND(COALESCE(STDDEV(dp.pick_no), 0)::numeric, 2)::float as pick_stddev,
       COUNT(*)::int as pick_count,
       ROUND(AVG(dp.amount)::numeric, 2)::float as avg_amount,
