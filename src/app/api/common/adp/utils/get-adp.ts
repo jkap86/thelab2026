@@ -118,18 +118,18 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
   const teams = filters?.teams;
   const avgPickExpr = teams
     ? `ROUND(((FLOOR((ROUND(AVG(dp.pick_no)) - 1) / ${teams}) + 1) +
-       ((ROUND(AVG(dp.pick_no)) - 1) % ${teams} + 1) / 100.0)::numeric, 2)`
-    : `ROUND(AVG(dp.pick_no)::numeric, 2)`;
+       ((ROUND(AVG(dp.pick_no)) - 1) % ${teams} + 1) / 100.0)::numeric, 2)::float`
+    : `ROUND(AVG(dp.pick_no)::numeric, 2)::float`;
 
   const minPickExpr = teams
     ? `ROUND(((FLOOR((MIN(dp.pick_no) - 1) / ${teams}) + 1) +
-       ((MIN(dp.pick_no) - 1) % ${teams} + 1) / 100.0)::numeric, 2)`
-    : `MIN(dp.pick_no)`;
+       ((MIN(dp.pick_no) - 1) % ${teams} + 1) / 100.0)::numeric, 2)::float`
+    : `MIN(dp.pick_no)::float`;
 
   const maxPickExpr = teams
     ? `ROUND(((FLOOR((MAX(dp.pick_no) - 1) / ${teams}) + 1) +
-       ((MAX(dp.pick_no) - 1) % ${teams} + 1) / 100.0)::numeric, 2)`
-    : `MAX(dp.pick_no)`;
+       ((MAX(dp.pick_no) - 1) % ${teams} + 1) / 100.0)::numeric, 2)::float`
+    : `MAX(dp.pick_no)::float`;
 
   const query = `
     WITH filtered_leagues AS (
