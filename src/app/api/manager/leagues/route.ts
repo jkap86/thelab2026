@@ -19,7 +19,7 @@ import { Trade } from "@/lib/types/trades-types";
 
 export const dynamic = "force-dynamic";
 
-const CC = "public, max-age=30, s-maxage=360, stale-while-revalidate=300";
+const CC = "private, max-age=30, stale-while-revalidate=60";
 
 const CUTOFF = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
 
@@ -569,7 +569,8 @@ async function upsertUsers(users: User[], client: PoolClient) {
       type = CASE
         WHEN users.type = 'S' THEN users.type
         ELSE EXCLUDED.type
-      END;
+      END
+    RETURNING (xmax = 0) AS is_insert;
   `;
 
   const values = users.flatMap((user) => [
@@ -579,9 +580,10 @@ async function upsertUsers(users: User[], client: PoolClient) {
     user.type,
   ]);
 
-  const upserted = await client.query(upsertUsersQuery, values);
+  const result = await client.query(upsertUsersQuery, values);
 
-  return upserted.rowCount ?? 0;
+  // Count only new inserts (xmax = 0), not updates
+  return result.rows.filter((row) => row.is_insert).length;
 }
 
 async function upsertLeagues(leagues: League[], client: PoolClient) {
@@ -594,7 +596,8 @@ async function upsertLeagues(leagues: League[], client: PoolClient) {
         `($${i * 9 + 1}, $${i * 9 + 2}, $${i * 9 + 3}, $${i * 9 + 4}, $${
           i * 9 + 5
         }, $${i * 9 + 6}, $${i * 9 + 7}, $${i * 9 + 8}, $${i * 9 + 9})`
-    )}    ON CONFLICT (league_id) DO UPDATE SET
+    )}
+    ON CONFLICT (league_id) DO UPDATE SET
       name = EXCLUDED.name,
       avatar = EXCLUDED.avatar,
       season = EXCLUDED.season,
@@ -602,7 +605,8 @@ async function upsertLeagues(leagues: League[], client: PoolClient) {
       settings = EXCLUDED.settings,
       scoring_settings = EXCLUDED.scoring_settings,
       roster_positions = EXCLUDED.roster_positions,
-      rosters = EXCLUDED.rosters;
+      rosters = EXCLUDED.rosters
+    RETURNING (xmax = 0) AS is_insert;
   `;
 
   const values = leagues.flatMap((league) => [
@@ -617,9 +621,10 @@ async function upsertLeagues(leagues: League[], client: PoolClient) {
     JSON.stringify(league.rosters),
   ]);
 
-  const upserted = await client.query(upsertLeaguesQuery, values);
+  const result = await client.query(upsertLeaguesQuery, values);
 
-  return upserted.rowCount ?? 0;
+  // Count only new inserts (xmax = 0), not updates
+  return result.rows.filter((row) => row.is_insert).length;
 }
 
 async function upsertTrades(trades: Trade[], client: PoolClient) {
@@ -634,7 +639,8 @@ async function upsertTrades(trades: Trade[], client: PoolClient) {
         }, $${i * 7 + 6}, $${i * 7 + 7})`
     )}
     ON CONFLICT (transaction_id) DO UPDATE SET
-      draft_picks = EXCLUDED.draft_picks;
+      draft_picks = EXCLUDED.draft_picks
+    RETURNING (xmax = 0) AS is_insert;
   `;
 
   const values = trades.flatMap((trade) => [
@@ -647,7 +653,8 @@ async function upsertTrades(trades: Trade[], client: PoolClient) {
     JSON.stringify(trade.rosters),
   ]);
 
-  const upserted = await client.query(upsertTradesQuery, values);
+  const result = await client.query(upsertTradesQuery, values);
 
-  return upserted.rowCount ?? 0;
+  // Count only new inserts (xmax = 0), not updates
+  return result.rows.filter((row) => row.is_insert).length;
 }

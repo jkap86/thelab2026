@@ -6,7 +6,7 @@ import { addRosterMetrics } from "../manager/leagues/utils/add-roster-metrics";
 import { Allplayer } from "@/lib/types/common-types";
 import { Roster } from "@/lib/types/trades-types";
 
-const CC = "public, max-age=120, s-maxage=1200, stale-while-revalidate=3600";
+const CC = "public, max-age=300, s-maxage=1200, stale-while-revalidate=3600";
 
 const draftPickEquals = (value: string) => {
   return `(dp->>'season') || ' ' || (dp->>'round')::text || '.' 

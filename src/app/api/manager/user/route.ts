@@ -4,7 +4,7 @@ import axiosInstance from "@/lib/axios-instance";
 
 const CUTOFF = new Date().getTime() - 1 * 60 * 60 * 1000;
 
-const CC = "public, max-age=120, s-maxage=360, stale-while-revalidate=300";
+const CC = "private, max-age=120, s-maxage=360, stale-while-revalidate=300";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
