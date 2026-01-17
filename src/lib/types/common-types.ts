@@ -67,6 +67,31 @@ export type ColumnOption = {
 
 export type SearchOption = { id: string; text: string; display: JSX.Element };
 
+export type PlayerADP = {
+  player_id: string;
+  avg_pick: number;
+  min_pick: number;
+  max_pick: number;
+  pick_stddev: number;
+  pick_count: number;
+  avg_amount: number | null;
+  min_amount: number | null;
+  max_amount: number | null;
+  amount_stddev: number | null;
+  amount_count: number;
+};
+
+export type ADPFilters = {
+  startDate?: string;
+  endDate?: string;
+  leagueType?: string;
+  draftType?: string;
+  playerType?: string;
+  rosterSlots?: string;
+  scoring?: string;
+  superflex?: boolean;
+};
+
 export type OptimalPlayer = {
   index: number;
   slot__index: string;

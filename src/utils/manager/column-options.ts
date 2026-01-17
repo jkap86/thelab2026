@@ -215,6 +215,34 @@ export const playersColumnOptions: ColumnOption[] = [
       reverse?: boolean
     ) => getTextColor(value, min, max, avg, reverse),
   },
+  {
+    label: "ADP Dynasty Value",
+    abbrev: "ADP D",
+    desc: "Average Dynasty Value based on ADP",
+    key: "adp_d",
+    className: "font-pulang text-[2.25rem]",
+    style: (
+      value: number,
+      min: number,
+      max: number,
+      avg: number,
+      reverse?: boolean
+    ) => getTextColor(value, min, max, avg, reverse),
+  },
+  {
+    label: "ADP Rank",
+    abbrev: "ADP R",
+    desc: "Average Rank based on ADP",
+    key: "adp_r",
+    className: "font-pulang text-[2.25rem]",
+    style: (
+      value: number,
+      min: number,
+      max: number,
+      avg: number,
+      reverse?: boolean
+    ) => getTextColor(value, min, max, avg, reverse),
+  },
 ];
 
 export type TeamsColumnKey =

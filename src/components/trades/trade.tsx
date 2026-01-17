@@ -76,8 +76,8 @@ const Trade = ({
               </em>
             </div>
           </td>
-          <td colSpan={12} className="font-pulang font-black">
-            <div className="flex justify-evenly text-[var(--color7)] ">
+          <td colSpan={12} className="font-pulang font-black text-overflow">
+            <div className="flex justify-evenly text-[var(--color7)] text-overflow">
               <Avatar
                 avatar_id={trade.league.avatar}
                 type="league"

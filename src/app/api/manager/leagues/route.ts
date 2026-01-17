@@ -295,7 +295,9 @@ export async function updateLeagues(
                     round: pick.round,
                     draft_slot: pick.draft_slot,
                     pick_no: pick.pick_no,
-                    amount: pick.amount ?? null,
+                    amount: pick.metadata?.amount
+                      ? parseInt(pick.metadata.amount, 10)
+                      : null,
                     is_keeper: pick.is_keeper ?? false,
                   });
                 }

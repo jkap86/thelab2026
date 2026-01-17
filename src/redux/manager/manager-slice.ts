@@ -106,8 +106,8 @@ const initialState: ManagerState = {
     players: {
       column1: "# Own",
       column2: "KTC D",
-      column3: "Age",
-      column4: "Draft Class",
+      column3: "ADP D",
+      column4: "ADP R",
       sortBy: {
         column: 1,
         direction: "desc",

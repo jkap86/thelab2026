@@ -25,7 +25,9 @@ export const filterPlayerIds = (
     const conditionDraftClass =
       filterDraftClass === "All" ||
       (isPick && filterDraftClass === playerId.split(" ")[0]) ||
-      season - allplayers[playerId]?.years_exp + 1 ===
+      season -
+        allplayers[playerId]?.years_exp +
+        (season === new Date().getFullYear() ? 0 : 1) ===
         parseInt(filterDraftClass);
 
     return conditionPosition && conditionTeam && conditionDraftClass;

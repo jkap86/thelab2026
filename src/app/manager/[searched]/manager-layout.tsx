@@ -2,6 +2,7 @@
 
 import LoadingIcon from "@/components/common/loading-icon";
 import Heading from "@/components/manager/heading";
+import useFetchAdp from "@/hooks/common/useFetchAdp";
 import useFetchAllplayers from "@/hooks/common/useFetchAllplayers";
 import useFetchKtcCurrent from "@/hooks/common/useFetchKtcCurrent";
 import useFetchNflState from "@/hooks/common/useFetchNflState";
@@ -32,6 +33,7 @@ export default function ManagerLayout({
   useFetchAllplayers();
   useFetchNflState();
   useFetchKtcCurrent();
+  useFetchAdp();
 
   useFetchUserLeagues(searched);
 

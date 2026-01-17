@@ -35,7 +35,7 @@ export default function PlayersPage({
 }) {
   const dispatch: AppDispatch = useDispatch();
   const { searched } = use(params);
-  const { allplayers, ktcCurrent, nflState } = useSelector(
+  const { allplayers, ktcCurrent, nflState, adp } = useSelector(
     (state: RootState) => state.common
   );
   const { leagues, type1, type2, playerShares } = useSelector(
@@ -52,6 +52,8 @@ export default function PlayersPage({
     draftClassFilter,
   } = useSelector((state: RootState) => state.manager.tabs.players);
   const [isOpen, setIsOpen] = useState(false);
+
+  console.log({ adp });
 
   const headers: Header[] = [
     {
@@ -100,7 +102,11 @@ export default function PlayersPage({
             : ktcCurrent?.player_values?.[playerId] ?? 0,
           age: allplayers?.[playerId]?.age ?? 0,
           draft_class:
-            nflState?.season! - (allplayers?.[playerId]?.years_exp ?? 0),
+            nflState?.season! -
+            (allplayers?.[playerId]?.years_exp ?? 0) +
+            (nflState?.season! === new Date().getFullYear() ? 0 : 1),
+          adp_d: adp?.dynasty?.[playerId]?.avg_pick ?? 999,
+          adp_r: adp?.redraft?.[playerId]?.avg_pick ?? 999,
         },
       ];
     })
@@ -228,7 +234,11 @@ export default function PlayersPage({
           Object.values(allplayers || {})
             .sort((a, b) => (a.years_exp || 0) - (b.years_exp || 0))
             .map((player) =>
-              (nflState?.season! - (player.years_exp || 0)).toString()
+              (
+                nflState?.season! -
+                (player.years_exp || 0) +
+                (nflState?.season! === new Date().getFullYear() ? 0 : 1)
+              ).toString()
             )
         )
       ),
