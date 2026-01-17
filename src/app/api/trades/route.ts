@@ -23,8 +23,15 @@ export async function GET(req: NextRequest) {
   const playerId4 = searchParams.get("playerId4");
   const leagueType1 = searchParams.get("leagueType1");
   const leagueType2 = searchParams.get("leagueType2");
-  const limit = searchParams.get("limit");
-  const offset = searchParams.get("offset");
+  const limitParam = searchParams.get("limit");
+  const offsetParam = searchParams.get("offset");
+
+  // Validate and clamp limit/offset to prevent DoS
+  const limit = Math.min(
+    Math.max(parseInt(limitParam ?? "100", 10) || 100, 1),
+    100
+  );
+  const offset = Math.max(parseInt(offsetParam ?? "0", 10) || 0, 0);
 
   console.log({
     playerId1,
@@ -33,8 +40,8 @@ export async function GET(req: NextRequest) {
     playerId4,
     leagueType1,
     leagueType2,
-    limit,
-    offset,
+    limit: limitParam,
+    offset: offsetParam,
   });
 
   const conditions: string[] = [

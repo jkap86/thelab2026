@@ -31,8 +31,12 @@ export async function GET(req: NextRequest) {
 
     const allplayersArray = await getAllplayersCached();
 
+    if (!allplayersArray) {
+      return NextResponse.json({ error: "Failed to load players data" }, { status: 500 });
+    }
+
     const allplayers = Object.fromEntries(
-      allplayersArray!.map((player) => [player.player_id, player])
+      allplayersArray.map((player) => [player.player_id, player])
     );
 
     const encoder = new TextEncoder();

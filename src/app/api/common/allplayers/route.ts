@@ -13,14 +13,14 @@ export async function GET(req: Request) {
     const etagInfo = await getAllplayersEtagInfo();
 
     // If fresh and ETag matches, return 304
-    if (etagInfo.isFresh && etagInfo.etag) {
+    if (etagInfo.isFresh && etagInfo.etag && etagInfo.lastModified) {
       const ifNoneMatch = req.headers.get("if-none-match");
       if (ifNoneMatch === etagInfo.etag) {
         return NextResponse.json(null, {
           status: 304,
           headers: {
             ETag: etagInfo.etag,
-            "Last-Modified": etagInfo.lastModified!.toUTCString(),
+            "Last-Modified": etagInfo.lastModified.toUTCString(),
             "Cache-Control": CC,
           },
         });

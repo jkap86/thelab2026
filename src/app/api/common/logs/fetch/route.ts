@@ -13,7 +13,10 @@ export async function GET() {
 
     return NextResponse.json(logRows.rows);
   } catch (err: unknown) {
-    if (err instanceof Error) console.log(err.message);
-    return NextResponse.json(err);
+    console.error("Failed to fetch logs:", err instanceof Error ? err.message : err);
+    return NextResponse.json(
+      { error: "Failed to fetch logs" },
+      { status: 500 }
+    );
   }
 }

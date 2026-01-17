@@ -15,6 +15,8 @@ const Heading = () => {
     (state: RootState) => state.manager
   );
 
+  if (!user) return null;
+
   return (
     <div className="relative max-w-[100dvmin] m-auto">
       <Link href={"/manager"} className="home">
@@ -23,9 +25,9 @@ const Heading = () => {
 
       <div className="text-center h-[7rem] text-[3rem] font-pulang mb-[2rem] m-auto text-[var(--color1)] font-black">
         <Avatar
-          avatar_id={user!.avatar}
+          avatar_id={user.avatar}
           type="user"
-          name={user!.username}
+          name={user.username}
           centered={true}
         />
       </div>

@@ -29,11 +29,17 @@ export async function getCachedLiveStats(
 
   // Start new fetch (only one at a time)
   console.log("---fetching live stats---");
-  fetchPromise = getLiveStats(week, season, seasonType).then((result) => {
-    cache = { data: result, timestamp: Date.now(), key };
-    fetchPromise = null;
-    return result;
-  });
+  fetchPromise = getLiveStats(week, season, seasonType)
+    .then((result) => {
+      cache = { data: result, timestamp: Date.now(), key };
+      fetchPromise = null;
+      return result;
+    })
+    .catch((err) => {
+      // Clear fetchPromise on error to prevent memory leak and allow retry
+      fetchPromise = null;
+      throw err;
+    });
 
   return fetchPromise;
 }

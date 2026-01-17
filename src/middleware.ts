@@ -49,11 +49,10 @@ export async function middleware(request: NextRequest) {
   redirectUrl.searchParams.set("ip", ipAddress);
   redirectUrl.searchParams.set("route", route);
 
-  try {
-    axiosInstance.get(redirectUrl.toString());
-  } catch {
+  // Fire-and-forget logging - use .catch() to handle promise rejection
+  axiosInstance.get(redirectUrl.toString()).catch(() => {
     // Silently fail - logging should not block requests
-  }
+  });
 
   return NextResponse.next();
 }

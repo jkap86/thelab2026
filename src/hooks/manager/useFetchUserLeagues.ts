@@ -70,7 +70,7 @@ export default function useFetchUserLeagues(searched: string) {
     dispatch(
       fetchLeagues({
         user_id: user.user_id,
-        week: nflState!.week,
+        week: nflState?.week ?? 1,
         signal: ctrlRefLeagues.current?.signal,
       })
     );
