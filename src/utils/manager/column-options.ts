@@ -216,9 +216,9 @@ export const playersColumnOptions: ColumnOption[] = [
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
-    label: "ADP Dynasty Value",
+    label: "ADP Dynasty",
     abbrev: "ADP D",
-    desc: "Average Dynasty Value based on ADP",
+    desc: "Average Draft Position Dynasty",
     key: "adp_d",
     className: "font-pulang text-[2.25rem]",
     style: (
@@ -230,9 +230,9 @@ export const playersColumnOptions: ColumnOption[] = [
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
-    label: "ADP Rank",
+    label: "ADP Redraft",
     abbrev: "ADP R",
-    desc: "Average Rank based on ADP",
+    desc: "Average Draft Position Redraft",
     key: "adp_r",
     className: "font-pulang text-[2.25rem]",
     style: (
