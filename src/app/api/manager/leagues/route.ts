@@ -95,7 +95,13 @@ export async function GET(req: NextRequest) {
               controller.enqueue(encoder.encode(JSON.stringify(league) + "\n"));
             }
           }
-          console.log({ newUsersCount, newLeaguesCount, newTradesCount, newDraftsCount, newDraftPicksCount });
+          console.log({
+            newUsersCount,
+            newLeaguesCount,
+            newTradesCount,
+            newDraftsCount,
+            newDraftPicksCount,
+          });
 
           controller.close();
         } catch (error: unknown) {
@@ -202,7 +208,14 @@ async function processLeagues(
     })
   );
 
-  return { processed, newUsersCount, newLeaguesCount, newTradesCount, newDraftsCount, newDraftPicksCount };
+  return {
+    processed,
+    newUsersCount,
+    newLeaguesCount,
+    newTradesCount,
+    newDraftsCount,
+    newDraftPicksCount,
+  };
 }
 
 export async function updateLeagues(
@@ -216,7 +229,8 @@ export async function updateLeagues(
   const draftsToUpsert: Draft[] = [];
   const draftPicksToUpsert: DraftPickRecord[] = [];
 
-  const currentSeason = process.env.SEASON || new Date().getFullYear().toString();
+  const currentSeason =
+    process.env.SEASON || new Date().getFullYear().toString();
 
   const batchSize = 5;
 
@@ -365,14 +379,27 @@ export async function updateLeagues(
     const newLeaguesCount = await upsertLeagues(leaguesToUpsert, client);
     const newTradesCount = await upsertTrades(tradesToUpsert, client);
     const newDraftsCount = await upsertDrafts(draftsToUpsert, client);
-    const newDraftPicksCount = await upsertDraftPicks(draftPicksToUpsert, client);
+    const newDraftPicksCount = await upsertDraftPicks(
+      draftPicksToUpsert,
+      client
+    );
 
     await client.query("COMMIT");
 
-    return { leaguesToUpsert, newUsersCount, newLeaguesCount, newTradesCount, newDraftsCount, newDraftPicksCount };
+    return {
+      leaguesToUpsert,
+      newUsersCount,
+      newLeaguesCount,
+      newTradesCount,
+      newDraftsCount,
+      newDraftPicksCount,
+    };
   } catch (err: unknown) {
     await client.query("ROLLBACK");
-    console.error("Failed to upsert leagues data:", err instanceof Error ? err.message : err);
+    console.error(
+      "Failed to upsert leagues data:",
+      err instanceof Error ? err.message : err
+    );
 
     return {
       leaguesToUpsert,
@@ -524,6 +551,66 @@ function getRostersUsernames(
   return rostersUsernames;
 }
 
+export function computeHistoricalRoster(
+  roster: Roster,
+  subsequentTransactions: SleeperTransaction[]
+): Roster {
+  let players = [...roster.players];
+  let draftPicks = [...roster.draftPicks];
+
+  // Process transactions in reverse chronological order (most recent first)
+  for (const txn of subsequentTransactions) {
+    // Reverse adds: remove players that were added after this trade
+    if (txn.adds) {
+      for (const [playerId, rosterIdTxn] of Object.entries(txn.adds)) {
+        if (rosterIdTxn === roster.roster_id) {
+          players = players.filter((p) => p !== playerId);
+        }
+      }
+    }
+
+    // Reverse drops: add back players that were dropped after this trade
+    if (txn.drops) {
+      for (const [playerId, rosterIdTxn] of Object.entries(txn.drops)) {
+        if (rosterIdTxn === roster.roster_id && !players.includes(playerId)) {
+          players.push(playerId);
+        }
+      }
+    }
+
+    // Reverse draft pick trades
+    for (const dp of txn.draft_picks || []) {
+      if (dp.owner_id === roster.roster_id) {
+        // This roster received a pick after - remove it
+        draftPicks = draftPicks.filter(
+          (p) =>
+            !(
+              p.season === parseInt(dp.season, 10) &&
+              p.round === dp.round &&
+              p.roster_id === dp.roster_id
+            )
+        );
+      }
+      if (dp.previous_owner_id === roster.roster_id) {
+        // This roster gave away a pick after - add it back
+        draftPicks.push({
+          season: parseInt(dp.season, 10),
+          round: dp.round,
+          roster_id: dp.roster_id,
+          original_username: roster.username,
+          order: undefined,
+        });
+      }
+    }
+  }
+
+  return {
+    ...roster,
+    players,
+    draftPicks,
+  };
+}
+
 async function getTrades(
   league: SleeperLeague,
   week: number,
@@ -537,97 +624,112 @@ async function getTrades(
     `https://api.sleeper.app/v1/league/${league.league_id}/transactions/${week}`
   );
 
-  return transactions.data
+  // Get ALL completed transactions sorted by time (ascending)
+  const allTransactions = transactions.data
     .filter(
       (t) =>
-        t.type === "trade" &&
         t.status === "complete" &&
         startupCompletionTime &&
         t.status_updated > startupCompletionTime
     )
-    .map((t) => {
-      const adds: { [player_id: string]: string } = {};
-      const drops: { [player_id: string]: string } = {};
+    .sort((a, b) => a.status_updated - b.status_updated);
 
-      const draftPicks = t.draft_picks.map((draftPick) => {
-        const originalUserId = rosters.find(
-          (roster) => roster.roster_id === draftPick.roster_id
-        )?.user_id;
+  // Filter for trades only
+  const trades = allTransactions.filter((t) => t.type === "trade");
 
-        const order =
-          draftPick.season === league.season
-            ? draftOrder?.[originalUserId || ""]
-            : undefined;
+  return trades.map((t) => {
+    // Find all transactions that happened AFTER this trade (reverse chronological)
+    const subsequentTransactions = allTransactions
+      .filter((txn) => txn.status_updated > t.status_updated)
+      .sort((a, b) => b.status_updated - a.status_updated);
 
-        return {
-          season: draftPick.season,
-          round: draftPick.round,
-          new:
-            rosters.find((roster) => roster.roster_id === draftPick.owner_id)
-              ?.user_id ?? "0",
-          old:
-            rosters.find(
-              (roster) => roster.roster_id === draftPick.previous_owner_id
-            )?.user_id ?? "0",
-          original:
-            rosters.find((roster) => roster.roster_id === draftPick.roster_id)
-              ?.username ?? "Team " + draftPick,
-          order,
-        };
-      });
+    // Compute historical roster for each roster
+    const historicalRosters = rosters.map((roster) =>
+      computeHistoricalRoster(roster, subsequentTransactions)
+    );
 
-      if (t.adds) {
-        Object.keys(t.adds).forEach((add) => {
-          const manager = rosters.find(
-            (roster) => roster.roster_id === t.adds[add]
-          );
+    const adds: { [player_id: string]: string } = {};
+    const drops: { [player_id: string]: string } = {};
 
-          adds[add] = manager?.user_id || "0";
-        });
-      }
+    const draftPicks = t.draft_picks.map((draftPick) => {
+      const originalUserId = rosters.find(
+        (roster) => roster.roster_id === draftPick.roster_id
+      )?.user_id;
 
-      if (t.drops) {
-        Object.keys(t.drops).forEach((drop) => {
-          const manager = rosters.find(
-            (roster) => roster.roster_id === t.drops[drop]
-          );
-
-          drops[drop] = manager?.user_id || "0";
-        });
-      }
+      const order =
+        draftPick.season === league.season
+          ? draftOrder?.[originalUserId || ""]
+          : undefined;
 
       return {
-        transaction_id: t.transaction_id,
-        status_updated: t.status_updated,
-        league_id: league.league_id,
-        league: {
-          league_id: league.league_id,
-          name: league.name,
-          avatar: league.avatar,
-          roster_positions: league.roster_positions || [],
-          scoring_settings: league.scoring_settings || {},
-          settings: league.settings,
-          status: league.status,
-          season: league.season,
-        },
-        adds,
-        drops,
-        draft_picks: draftPicks,
-        rosters: rosters.map((roster) => ({
-          roster_id: roster.roster_id,
-          user_id: roster.user_id,
-          username: roster.username,
-          avatar: roster.avatar,
-          players: roster.players,
-          draftPicks: roster.draftPicks,
-          wins: roster.wins,
-          losses: roster.losses,
-          ties: roster.ties,
-          fp: roster.fp,
-          fpa: roster.fpa,
-        })),
+        season: draftPick.season,
+        round: draftPick.round,
+        new:
+          rosters.find((roster) => roster.roster_id === draftPick.owner_id)
+            ?.user_id ?? "0",
+        old:
+          rosters.find(
+            (roster) => roster.roster_id === draftPick.previous_owner_id
+          )?.user_id ?? "0",
+        original:
+          rosters.find((roster) => roster.roster_id === draftPick.roster_id)
+            ?.username ?? "Team " + draftPick,
+        order,
       };
     });
+
+    if (t.adds) {
+      Object.keys(t.adds).forEach((add) => {
+        const manager = rosters.find(
+          (roster) => roster.roster_id === t.adds[add]
+        );
+
+        adds[add] = manager?.user_id || "0";
+      });
+    }
+
+    if (t.drops) {
+      Object.keys(t.drops).forEach((drop) => {
+        const manager = rosters.find(
+          (roster) => roster.roster_id === t.drops[drop]
+        );
+
+        drops[drop] = manager?.user_id || "0";
+      });
+    }
+
+    return {
+      transaction_id: t.transaction_id,
+      status_updated: t.status_updated,
+      league_id: league.league_id,
+      league: {
+        league_id: league.league_id,
+        name: league.name,
+        avatar: league.avatar,
+        roster_positions: league.roster_positions || [],
+        scoring_settings: league.scoring_settings || {},
+        settings: league.settings,
+        status: league.status,
+        season: league.season,
+      },
+      adds,
+      drops,
+      draft_picks: draftPicks,
+      rosters: historicalRosters.map((roster) => ({
+        roster_id: roster.roster_id,
+        user_id: roster.user_id,
+        username: roster.username,
+        avatar: roster.avatar,
+        players: roster.players,
+        draftPicks: roster.draftPicks,
+        wins: roster.wins,
+        losses: roster.losses,
+        ties: roster.ties,
+        fp: roster.fp,
+        fpa: roster.fpa,
+      })),
+    };
+  });
 }
 
 async function upsertUsers(users: User[], client: PoolClient) {
@@ -716,7 +818,8 @@ async function upsertTrades(trades: Trade[], client: PoolClient) {
         }, $${i * 7 + 6}, $${i * 7 + 7})`
     )}
     ON CONFLICT (transaction_id) DO UPDATE SET
-      draft_picks = EXCLUDED.draft_picks
+      draft_picks = EXCLUDED.draft_picks,
+      rosters = EXCLUDED.rosters
     RETURNING (xmax = 0) AS is_insert;
   `;
 
@@ -758,7 +861,11 @@ async function upsertDrafts(drafts: Draft[], client: PoolClient) {
     VALUES ${drafts
       .map(
         (_, i) =>
-          `($${i * 11 + 1}, $${i * 11 + 2}, $${i * 11 + 3}, $${i * 11 + 4}, $${i * 11 + 5}, $${i * 11 + 6}, $${i * 11 + 7}, $${i * 11 + 8}, $${i * 11 + 9}, $${i * 11 + 10}, $${i * 11 + 11})`
+          `($${i * 11 + 1}, $${i * 11 + 2}, $${i * 11 + 3}, $${i * 11 + 4}, $${
+            i * 11 + 5
+          }, $${i * 11 + 6}, $${i * 11 + 7}, $${i * 11 + 8}, $${i * 11 + 9}, $${
+            i * 11 + 10
+          }, $${i * 11 + 11})`
       )
       .join(",")}
     ON CONFLICT (draft_id) DO UPDATE SET
@@ -795,7 +902,9 @@ async function upsertDraftPicks(picks: DraftPickRecord[], client: PoolClient) {
     VALUES ${picks
       .map(
         (_, i) =>
-          `($${i * 9 + 1}, $${i * 9 + 2}, $${i * 9 + 3}, $${i * 9 + 4}, $${i * 9 + 5}, $${i * 9 + 6}, $${i * 9 + 7}, $${i * 9 + 8}, $${i * 9 + 9})`
+          `($${i * 9 + 1}, $${i * 9 + 2}, $${i * 9 + 3}, $${i * 9 + 4}, $${
+            i * 9 + 5
+          }, $${i * 9 + 6}, $${i * 9 + 7}, $${i * 9 + 8}, $${i * 9 + 9})`
       )
       .join(",")}
     ON CONFLICT (draft_id, pick_no) DO NOTHING

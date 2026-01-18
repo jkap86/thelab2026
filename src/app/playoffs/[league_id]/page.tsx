@@ -72,14 +72,13 @@ export default function PlayoffsPage({
       roster_positions: string[],
       scoring_settings: { [key: string]: number }
     ) => {
-      const res = await axiosInstance.get("/api/playoffs/completed-scores", {
+      const res = await axiosInstance.post("/api/playoffs/completed-scores", {
         params: {
           season: "2025",
           season_type: "post",
+          league_id: league_id,
           weeks: JSON.stringify(completedWeeks),
-          rosters: JSON.stringify(
-            rosters.map((roster) => [roster.roster_id, roster.players ?? []])
-          ),
+          rosters: JSON.stringify(rosters),
           roster_positions: JSON.stringify(roster_positions),
           scoring_settings: JSON.stringify(scoring_settings),
         },
@@ -92,7 +91,7 @@ export default function PlayoffsPage({
       (round) => parseInt(round) < nflState.week
     );
 
-    setSelectedRounds([...completedWeeks, nflState.week.toString()]);
+    setSelectedRounds([nflState.week.toString()]);
 
     if (completedWeeks.length > 0) {
       fetchCompletedWeeks(

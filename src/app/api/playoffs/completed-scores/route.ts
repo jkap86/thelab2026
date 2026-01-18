@@ -5,6 +5,10 @@ import { getPlayerPoints } from "../../utils/get-player-points";
 import { getOptimalStarters } from "../../../../utils/common/get-optimal-starters";
 import { OptimalPlayer } from "@/lib/types/common-types";
 import { getSchedule } from "../../utils/get-schedule";
+import { computeHistoricalRoster } from "../../manager/leagues/route";
+import { SleeperTransaction } from "@/lib/types/sleeper-types";
+import axiosInstance from "@/lib/axios-instance";
+import { Roster } from "@/lib/types/manager-types";
 
 type OptimalPlayersWeek = {
   [roster_id: string]: {
@@ -14,21 +18,30 @@ type OptimalPlayersWeek = {
   };
 };
 
+const weekCutoffs: { [key: string]: number } = {
+  "1": new Date("2024-01-13T23:59:59Z").getTime(),
+  "2": new Date("2024-01-20T23:59:59Z").getTime(),
+  "3": new Date("2024-01-27T23:59:59Z").getTime(),
+};
+
 const CC = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=3600";
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const searchParams = body.params;
 
-  const season = searchParams.get("season");
-  const seasonType = searchParams.get("season_type");
-  const weeksString = searchParams.get("weeks");
-  const rostersString = searchParams.get("rosters");
-  const rosterPositionsString = searchParams.get("roster_positions");
-  const scoringSettingsString = searchParams.get("scoring_settings");
+  const season = searchParams["season"];
+  const seasonType = searchParams["season_type"];
+  const league_id = searchParams["league_id"];
+  const weeksString = searchParams["weeks"];
+  const rostersString = searchParams["rosters"];
+  const rosterPositionsString = searchParams["roster_positions"];
+  const scoringSettingsString = searchParams["scoring_settings"];
 
   if (
     !season ||
     !seasonType ||
+    !league_id ||
     !weeksString ||
     !rostersString ||
     !scoringSettingsString ||
@@ -52,6 +65,21 @@ export async function GET(req: NextRequest) {
       [week: string]: OptimalPlayersWeek;
     } = {};
 
+    const transactions = (
+      await Promise.all(
+        weeks.map(async (week: number) => {
+          const transactionsWeek: { data: SleeperTransaction[] } =
+            await axiosInstance.get(
+              `https://api.sleeper.app/v1/league/${league_id}/transactions/${week}`
+            );
+
+          return transactionsWeek.data.filter(
+            (transaction) => transaction.status === "complete"
+          );
+        })
+      )
+    ).flat();
+
     await Promise.all(
       weeks.map(async (week: number) => {
         const [schedule, sleeperStats] = await Promise.all([
@@ -71,9 +99,20 @@ export async function GET(req: NextRequest) {
           sleeperStats.map((stat) => [stat.player_id, stat.stats])
         );
 
+        const historicalRosters = rosters.map((roster: Roster) =>
+          computeHistoricalRoster(
+            roster,
+            transactions
+              .filter(
+                (txn) => txn.status_updated > weekCutoffs[week.toString()]
+              )
+              .sort((a, b) => b.status_updated - a.status_updated)
+          )
+        );
+
         const playerPoints = Object.fromEntries(
-          rosters.flatMap((roster: [number, string[]]) => {
-            return roster[1].map((playerId: string) => [
+          historicalRosters.flatMap((roster: Roster) => {
+            return roster.players.map((playerId: string) => [
               playerId,
               getPlayerPoints(scoringSettings, stats[playerId] || {}),
             ]);
@@ -81,16 +120,16 @@ export async function GET(req: NextRequest) {
         );
 
         const optimalRostersWeek = Object.fromEntries(
-          rosters.map((roster: [number, string[]]) => {
+          historicalRosters.map((roster: Roster) => {
             const { optimalStarters, optimalBench } = getOptimalStarters(
               rosterPositions,
-              roster[1],
+              roster.players,
               playerPoints,
               allplayers
             );
 
             return [
-              roster[0],
+              roster.roster_id,
               {
                 optimal_starters: optimalStarters.map((player) => {
                   const team = allplayers[player.optimal_player_id]?.team;
