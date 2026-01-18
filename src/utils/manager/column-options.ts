@@ -243,6 +243,20 @@ export const playersColumnOptions: ColumnOption[] = [
       reverse?: boolean
     ) => getTextColor(value, min, max, avg, reverse),
   },
+  {
+    label: "Auction Budget Percentage Dynasty",
+    abbrev: "Budget % D",
+    desc: "Avg percentage of total auction budget spent on player in dynasty leagues.",
+    key: "auction_budget_percentage_d",
+    className: "font-pulang text-[2.25rem]",
+    style: (
+      value: number,
+      min: number,
+      max: number,
+      avg: number,
+      reverse?: boolean
+    ) => getTextColor(value, min, max, avg, reverse),
+  },
 ];
 
 export type TeamsColumnKey =

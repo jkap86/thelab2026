@@ -107,6 +107,10 @@ export default function PlayersPage({
             (nflState?.season! === new Date().getFullYear() ? 0 : 1),
           adp_d: adp?.dynasty?.[playerId]?.avg_pick ?? 999,
           adp_r: adp?.redraft?.[playerId]?.avg_pick ?? 999,
+          auction_budget_percentage_d:
+            Math.round((adp?.dynasty?.[playerId]?.avg_amount ?? 0) * 10) / 10,
+          auction_budget_percentage_r:
+            Math.round((adp?.redraft?.[playerId]?.avg_amount ?? 0) * 10) / 10,
         },
       ];
     })

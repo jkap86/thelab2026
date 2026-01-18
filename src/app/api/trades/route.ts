@@ -34,17 +34,6 @@ export async function GET(req: NextRequest) {
   );
   const offset = Math.max(parseInt(offsetParam ?? "0", 10) || 0, 0);
 
-  console.log({
-    playerId1,
-    playerId2,
-    playerId3,
-    playerId4,
-    leagueType1,
-    leagueType2,
-    limit: limitParam,
-    offset: offsetParam,
-  });
-
   const conditions: string[] = [
     `(SELECT count(*) FROM jsonb_each(t.adds)) <= 10`,
   ];

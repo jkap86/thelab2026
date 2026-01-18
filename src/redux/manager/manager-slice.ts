@@ -107,7 +107,7 @@ const initialState: ManagerState = {
       column1: "# Own",
       column2: "KTC D",
       column3: "ADP D",
-      column4: "Age",
+      column4: "Budget % D",
       sortBy: {
         column: 1,
         direction: "desc",
