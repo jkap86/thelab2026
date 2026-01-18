@@ -31,7 +31,6 @@ export default function useFetchAdp() {
         key: "redraft",
         filters: {
           leagueType: "0",
-          draftType: "snake",
           superflex: true,
           teams: 12,
           startDate,
@@ -50,7 +49,6 @@ export default function useFetchAdp() {
         key: "dynasty",
         filters: {
           leagueType: "2",
-          draftType: "snake",
           superflex: true,
           teams: 12,
           startDate,

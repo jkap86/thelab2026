@@ -24,19 +24,19 @@ const SLOT_COLUMNS: Record<string, string> = {
 };
 
 export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
-  // Separate conditions for leagues CTE vs drafts/main query
+  // Build common conditions for leagues
   const leagueConditions: string[] = [];
-  const draftConditions: string[] = ["d.status = 'complete'"];
+  const baseDraftConditions: string[] = ["d.status = 'complete'"];
   const values: (string | number)[] = [];
 
   // Date filters (on drafts)
   if (filters?.startDate) {
     values.push(new Date(filters.startDate).getTime());
-    draftConditions.push(`d.start_time >= $${values.length}`);
+    baseDraftConditions.push(`d.start_time >= $${values.length}`);
   }
   if (filters?.endDate) {
     values.push(new Date(filters.endDate).getTime());
-    draftConditions.push(`d.start_time <= $${values.length}`);
+    baseDraftConditions.push(`d.start_time <= $${values.length}`);
   }
 
   // League type filter (on leagues)
@@ -45,23 +45,19 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
     leagueConditions.push(`settings ->> 'type' = $${values.length}`);
   }
 
-  // Draft type filter (on drafts)
-  if (filters?.draftType) {
-    values.push(filters.draftType);
-    draftConditions.push(`d.type = $${values.length}`);
-  }
-
   // Player type filter (on drafts settings)
   // 0 or null = all players, 1 = rookies, 2 = veterans
   if (filters?.playerType) {
     if (filters.playerType === "0") {
       // 0 means all players - match '0' OR null/missing
-      draftConditions.push(
+      baseDraftConditions.push(
         `(d.settings ->> 'player_type' = '0' OR d.settings ->> 'player_type' IS NULL)`
       );
     } else {
       values.push(filters.playerType);
-      draftConditions.push(`d.settings ->> 'player_type' = $${values.length}`);
+      baseDraftConditions.push(
+        `d.settings ->> 'player_type' = $${values.length}`
+      );
     }
   }
 
@@ -113,8 +109,6 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
       : "";
 
   // Build round.pick format if teams specified
-  // Round average to integer first to ensure valid round.pick (no 2.13 in 12-team)
-  // Cast to numeric for ROUND(..., 2) to ensure .10 not .1 for pick 10
   const teams = filters?.teams;
   const avgPickExpr = teams
     ? `ROUND(((FLOOR((ROUND(AVG(dp.pick_no)) - 1) / ${teams}) + 1) +
@@ -131,7 +125,9 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
        ((MAX(dp.pick_no) - 1) % ${teams} + 1) / 100.0)::numeric, 2)::float`
     : `MAX(dp.pick_no)::float`;
 
-  const query = `
+  // Query for snake drafts (pick positions)
+  const snakeDraftConditions = [...baseDraftConditions, `d.type = 'snake'`];
+  const snakeQuery = `
     WITH filtered_leagues AS (
       SELECT league_id
       FROM leagues
@@ -143,22 +139,88 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
       ${minPickExpr} as min_pick,
       ${maxPickExpr} as max_pick,
       ROUND(COALESCE(STDDEV(dp.pick_no), 0)::numeric, 2)::float as pick_stddev,
-      COUNT(*)::int as pick_count,
-      ROUND(AVG(dp.amount)::numeric, 2)::float as avg_amount,
-      MIN(dp.amount)::int as min_amount,
-      MAX(dp.amount)::int as max_amount,
-      ROUND(COALESCE(STDDEV(dp.amount), 0)::numeric, 2)::float as amount_stddev,
+      COUNT(*)::int as pick_count
+    FROM draft_picks dp
+    JOIN drafts d ON dp.draft_id = d.draft_id
+    WHERE d.league_id IN (SELECT league_id FROM filtered_leagues)
+      AND ${snakeDraftConditions.join(" AND ")}
+    GROUP BY dp.player_id
+    HAVING COUNT(*) >= 3;
+  `;
+
+  // Query for auction drafts (amounts as % of budget)
+  const auctionDraftConditions = [...baseDraftConditions, `d.type = 'auction'`];
+  const auctionQuery = `
+    WITH filtered_leagues AS (
+      SELECT league_id
+      FROM leagues
+      ${leagueWhere}
+    )
+    SELECT
+      dp.player_id,
+      ROUND(AVG(dp.amount * 100.0 / NULLIF((d.settings ->> 'budget')::int, 0))::numeric, 2)::float as avg_amount,
+      ROUND(MIN(dp.amount * 100.0 / NULLIF((d.settings ->> 'budget')::int, 0))::numeric, 2)::float as min_amount,
+      ROUND(MAX(dp.amount * 100.0 / NULLIF((d.settings ->> 'budget')::int, 0))::numeric, 2)::float as max_amount,
+      ROUND(COALESCE(STDDEV(dp.amount * 100.0 / NULLIF((d.settings ->> 'budget')::int, 0)), 0)::numeric, 2)::float as amount_stddev,
       COUNT(dp.amount)::int as amount_count
     FROM draft_picks dp
     JOIN drafts d ON dp.draft_id = d.draft_id
     WHERE d.league_id IN (SELECT league_id FROM filtered_leagues)
-      AND ${draftConditions.join(" AND ")}
+      AND ${auctionDraftConditions.join(" AND ")}
+      AND dp.amount IS NOT NULL
+      AND dp.amount > 0
+      AND (d.settings ->> 'budget')::int > 0
     GROUP BY dp.player_id
-    HAVING COUNT(*) >= 3
-    ORDER BY avg_pick ASC;
+    HAVING COUNT(*) >= 3;
   `;
 
-  const result = await pool.query(query, values);
+  // Run both queries in parallel
+  const [snakeResult, auctionResult] = await Promise.all([
+    pool.query(snakeQuery, values),
+    pool.query(auctionQuery, values),
+  ]);
 
-  return result.rows;
+  // Create a map of auction amounts by player_id
+  const auctionMap = new Map<
+    string,
+    {
+      avg_amount: number;
+      min_amount: number;
+      max_amount: number;
+      amount_stddev: number;
+      amount_count: number;
+    }
+  >();
+  for (const row of auctionResult.rows) {
+    auctionMap.set(row.player_id, {
+      avg_amount: row.avg_amount,
+      min_amount: row.min_amount,
+      max_amount: row.max_amount,
+      amount_stddev: row.amount_stddev,
+      amount_count: row.amount_count,
+    });
+  }
+
+  // Combine snake pick data with auction amount data
+  const combined: PlayerADP[] = snakeResult.rows.map((row) => {
+    const auction = auctionMap.get(row.player_id);
+    return {
+      player_id: row.player_id,
+      avg_pick: row.avg_pick,
+      min_pick: row.min_pick,
+      max_pick: row.max_pick,
+      pick_stddev: row.pick_stddev,
+      pick_count: row.pick_count,
+      avg_amount: auction?.avg_amount ?? null,
+      min_amount: auction?.min_amount ?? null,
+      max_amount: auction?.max_amount ?? null,
+      amount_stddev: auction?.amount_stddev ?? null,
+      amount_count: auction?.amount_count ?? 0,
+    };
+  });
+
+  // Sort by avg_pick
+  combined.sort((a, b) => (a.avg_pick ?? 0) - (b.avg_pick ?? 0));
+
+  return combined;
 }
