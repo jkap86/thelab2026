@@ -1,10 +1,14 @@
 import { Trade } from "@/lib/types/trades-types";
 import { createSlice } from "@reduxjs/toolkit";
+import { fetchLeaguemates } from "./leaguemates-actions";
 import { fetchTrades } from "./trades-actions";
 
 export interface TradesState {
   isLoadingTrades: boolean;
+  isLoadingLeaguemates: boolean;
+
   trades: {
+    managers: string[] | undefined;
     playerId1: string | undefined;
     playerId2: string | undefined;
     playerId3: string | undefined;
@@ -16,6 +20,8 @@ export interface TradesState {
   } | null;
   errorTrades: string | null;
 
+  username: string | undefined;
+  leaguemateIds: string[];
   playerId1: string | undefined;
   playerId2: string | undefined;
   playerId3: string | undefined;
@@ -26,9 +32,12 @@ export interface TradesState {
 
 const initialState: TradesState = {
   isLoadingTrades: false,
+  isLoadingLeaguemates: false,
   trades: null,
   errorTrades: null,
 
+  username: undefined,
+  leaguemateIds: [],
   playerId1: undefined,
   playerId2: undefined,
   playerId3: undefined,
@@ -50,6 +59,17 @@ const tradesSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      .addCase(fetchLeaguemates.pending, (state) => {
+        state.isLoadingLeaguemates = true;
+      })
+      .addCase(fetchLeaguemates.fulfilled, (state, action) => {
+        state.isLoadingLeaguemates = false;
+        state.username = action.payload.username;
+        state.leaguemateIds = action.payload.leaguemateIds;
+      })
+      .addCase(fetchLeaguemates.rejected, (state) => {
+        state.isLoadingLeaguemates = false;
+      })
       .addCase(fetchTrades.pending, (state) => {
         state.isLoadingTrades = true;
         state.errorTrades = null;

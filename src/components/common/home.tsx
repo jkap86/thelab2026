@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import logo from "../../../public/images/thelab.png";
 import axiosInstance from "@/lib/axios-instance";
+import SearchInput from "./search-input";
 
 export default function Home({
   title,
@@ -62,42 +63,25 @@ export default function Home({
             {title}
           </h1>
 
-          <div className="user-input text-[2rem] flex justify-center">
-            <input
-              type="text"
+          <div className="text-[2rem]">
+            <SearchInput
               value={type === "username" ? searched : username}
-              placeholder={"Username"}
+              placeholder="Username"
               onChange={
                 type === "username"
                   ? handleInputChange
                   : (e) => setUsername(e.target.value.trim())
               }
+              onButtonClick={
+                type === "username" ? () => router.push(linkTo) : fetchLeagues
+              }
+              buttonText={type === "username" ? "Go" : "Get Leagues"}
+              disabled={
+                type === "leagueId" &&
+                (!username || username === leagues.username)
+              }
               list="users"
-              className="bg-[var(--color1)] opacity-80 text-center 
-                outline-double outline-[var(--color1)] outline-4
-                shadow-[inset_0_0_3rem_black] text-[var(--color3)]
-                !text-shadow-[0_0_.1rem_black] font-chill
-                font-bold p-2 contrast-[2] w-[80%] tracking-wider rounded placeholder:opacity-50"
             />
-
-            {type === "username" ? (
-              <button
-                type="button"
-                onClick={() => router.push(linkTo)}
-                className="text-[var(--color1)] p-2 outline-double outline-[var(--color1)] outline-4 bg-[var(--color2)] font-black rounded"
-              >
-                Go
-              </button>
-            ) : (
-              <button
-                disabled={!username || username === leagues.username}
-                type="button"
-                onClick={fetchLeagues}
-                className="text-[var(--color1)] text-[1rem] font-score p-2 outline-double outline-[var(--color1)] outline-4 bg-[var(--color2)] font-black rounded"
-              >
-                Get Leagues
-              </button>
-            )}
           </div>
 
           {type === "leagueId" && (

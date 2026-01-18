@@ -7,6 +7,7 @@ export const fetchTrades = createAsyncThunk<
   {
     trades: Trade[];
     count: number;
+    managers: string[] | undefined;
     playerId1: string | undefined;
     playerId2: string | undefined;
     playerId3: string | undefined;
@@ -15,6 +16,7 @@ export const fetchTrades = createAsyncThunk<
     leagueType2: string;
   },
   {
+    managers: string[] | undefined;
     playerId1: string | undefined;
     playerId2: string | undefined;
     playerId3: string | undefined;
@@ -30,6 +32,7 @@ export const fetchTrades = createAsyncThunk<
   "trades/fetchTrades",
   async (
     {
+      managers,
       playerId1,
       playerId2,
       playerId3,
@@ -45,6 +48,7 @@ export const fetchTrades = createAsyncThunk<
       const response: { data: { trades: Trade[]; count: number } } =
         await axiosInstance.get("/api/trades", {
           params: {
+            managers: managers ? JSON.stringify(managers) : undefined,
             playerId1,
             playerId2,
             playerId3,
@@ -59,6 +63,7 @@ export const fetchTrades = createAsyncThunk<
 
       return {
         ...response.data,
+        managers,
         playerId1,
         playerId2,
         playerId3,
@@ -73,7 +78,7 @@ export const fetchTrades = createAsyncThunk<
         });
       }
       return rejectWithValue({
-        message: (error as Error).message ?? "Failed to fetch user",
+        message: (error as Error).message ?? "Failed to fetch trades",
       });
     }
   }

@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
   const leagueType2 = searchParams.get("leagueType2");
   const limitParam = searchParams.get("limit");
   const offsetParam = searchParams.get("offset");
+  const managersParam = searchParams.get("managers");
 
   // Validate and clamp limit/offset to prevent DoS
   const limit = Math.min(
@@ -291,6 +292,28 @@ export async function GET(req: NextRequest) {
     conditions.push(`l.settings ->> 'best_ball' = $${values.length + 1}`);
 
     values.push(leagueType2);
+  }
+
+  if (managersParam) {
+    const managers: string[] = JSON.parse(managersParam);
+    if (managers.length > 0) {
+      values.push(managers);
+      conditions.push(`(
+        EXISTS (
+          SELECT 1 FROM jsonb_each_text(t.adds) e(k, v)
+          WHERE v = ANY($${values.length}::text[])
+        )
+        OR EXISTS (
+          SELECT 1 FROM jsonb_each_text(t.drops) e(k, v)
+          WHERE v = ANY($${values.length}::text[])
+        )
+        OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements(t.draft_picks) dp
+          WHERE dp->>'new' = ANY($${values.length}::text[])
+            OR dp->>'old' = ANY($${values.length}::text[])
+        )
+      )`);
+    }
   }
 
   const getTradesQuery = `

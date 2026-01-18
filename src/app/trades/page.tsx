@@ -3,6 +3,7 @@
 import Avatar from "@/components/common/avatar";
 import LoadingIcon from "@/components/common/loading-icon";
 import Search from "@/components/common/search";
+import SearchInput from "@/components/common/search-input";
 import AllTrades from "@/components/trades/all-trades";
 import FiltersModal from "@/components/trades/filters-modal";
 import LeaguemateTrades from "@/components/trades/leaguemate-trades";
@@ -10,6 +11,7 @@ import useFetchAllPlayers from "@/hooks/common/useFetchAllplayers";
 import useFetchKtcCurrent from "@/hooks/common/useFetchKtcCurrent";
 import useFetchNflState from "@/hooks/common/useFetchNflState";
 import { AppDispatch, RootState } from "@/redux/store";
+import { fetchLeaguemates } from "@/redux/trades/leaguemates-actions";
 import { fetchTrades } from "@/redux/trades/trades-actions";
 import { updateTradesState } from "@/redux/trades/trades-slice";
 import Link from "next/link";
@@ -24,7 +26,10 @@ const TradesPage = () => {
   const {
     trades,
     isLoadingTrades,
+    isLoadingLeaguemates,
     errorTrades,
+    username,
+    leaguemateIds,
     playerId1,
     playerId2,
     playerId3,
@@ -32,6 +37,8 @@ const TradesPage = () => {
     leagueType1,
     leagueType2,
   } = useSelector((state: RootState) => state.trades);
+
+  const [usernameInput, setUsernameInput] = useState("");
 
   const [tab, setTab] = useState<"All" | "Leaguemate">("All");
   const [isOpen, setIsOpen] = useState(false);
@@ -216,8 +223,47 @@ const TradesPage = () => {
       <div className="text-[3rem] font-metal text-[var(--color1)] text-center">
         Trades
       </div>
+      <div className="flex justify-center items-center font-score text-[1.5rem] my-4">
+        {["All", "Leaguemate"].map((item) => (
+          <div
+            key={item}
+            className={
+              "w-[10rem] py-4  mx-8 flex justify-center items-center rounded " +
+              (tab === item ? "bg-radial-active" : "bg-radial-gray")
+            }
+            onClick={() => setTab(item as "All" | "Leaguemate")}
+          >
+            {item}
+          </div>
+        ))}
+      </div>
+      {tab === "Leaguemate" && (
+        <div className="text-[1.5rem] flex flex-col items-center my-8">
+          <SearchInput
+            value={usernameInput}
+            placeholder="Username"
+            onChange={(e) => setUsernameInput(e.target.value.trim())}
+            onButtonClick={() =>
+              dispatch(fetchLeaguemates({ username: usernameInput }))
+            }
+            buttonText="Search"
+            disabled={
+              !usernameInput ||
+              usernameInput === username ||
+              isLoadingLeaguemates
+            }
+          />
+          {username &&
+            usernameInput === username &&
+            leaguemateIds.length > 0 && (
+              <div className="text-[1.25rem] text-[var(--color1)]  font-score">
+                {leaguemateIds.length} leaguemates
+              </div>
+            )}
+        </div>
+      )}
       <div className="flex flex-col items-center">
-        <div className="flex justify-center items-center m-8">
+        <div className="flex justify-center items-center mb-8">
           <i
             className="fa-solid fa-filter text-[3rem] text-[var(--color1)]"
             onClick={() => setIsOpen(true)}
@@ -232,10 +278,15 @@ const TradesPage = () => {
         {searches}
         <div>
           <button
-            className="p-4 bg-[var(--color3)] rounded m-8"
+            className="p-4 bg-[var(--color3)] rounded mt-8 disabled:opacity-50"
+            disabled={
+              tab === "Leaguemate" &&
+              (leaguemateIds.length === 0 || usernameInput !== username)
+            }
             onClick={() =>
               dispatch(
                 fetchTrades({
+                  managers: tab === "Leaguemate" ? leaguemateIds : undefined,
                   playerId1,
                   playerId2,
                   playerId3,
@@ -266,11 +317,7 @@ const TradesPage = () => {
       leagueType1 === trades?.leagueType1 &&
       !isLoadingTrades &&
       !errorTrades ? (
-        tab === "All" ? (
-          <AllTrades playerPickOptions={playerPickOptions} />
-        ) : (
-          <LeaguemateTrades playerPickOptions={playerPickOptions} />
-        )
+        <AllTrades playerPickOptions={playerPickOptions} />
       ) : isLoadingTrades ? (
         <LoadingIcon />
       ) : (

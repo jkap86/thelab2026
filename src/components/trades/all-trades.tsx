@@ -13,6 +13,7 @@ const AllTrades = ({
   const dispatch: AppDispatch = useDispatch();
   const {
     trades,
+    leaguemateIds,
     playerId1,
     playerId2,
     playerId3,
@@ -29,6 +30,7 @@ const AllTrades = ({
         fetchMore={() =>
           dispatch(
             fetchTrades({
+              managers: leaguemateIds.length > 0 ? leaguemateIds : undefined,
               playerId1,
               playerId2,
               playerId3,
