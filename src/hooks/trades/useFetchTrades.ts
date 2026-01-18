@@ -9,6 +9,7 @@ export default function useFetchTrades() {
     trades,
     isLoadingTrades,
     errorTrades,
+    leaguemateIds,
     playerId1,
     playerId2,
     playerId3,
@@ -33,6 +34,7 @@ export default function useFetchTrades() {
 
     dispatch(
       fetchTrades({
+        managers: leaguemateIds.length > 0 ? leaguemateIds : undefined,
         playerId1,
         playerId2,
         playerId3,
@@ -46,6 +48,7 @@ export default function useFetchTrades() {
     trades,
     isLoadingTrades,
     errorTrades,
+    leaguemateIds,
     playerId1,
     playerId2,
     playerId3,
