@@ -376,7 +376,7 @@ const AdpModal = ({
                     ))}
                   </select>
                   <select
-                    className="w-fit p-2 mx-1 rounded bg-[var(--color2)] text-white text-center"
+                    className="w-fit p-2 mx-1 rounded bg-[var(--color2)] text-white text-center font-score"
                     value={slot.operator}
                     onChange={(e) =>
                       updateRosterSlot(index, "operator", e.target.value)
@@ -447,7 +447,7 @@ const AdpModal = ({
                     ))}
                   </select>
                   <select
-                    className="w-fit p-2 mx-1 rounded bg-[var(--color2)] text-white text-center"
+                    className="w-fit p-2 mx-1 rounded bg-[var(--color2)] text-white text-center font-score"
                     value={filter.operator}
                     onChange={(e) =>
                       updateScoringFilter(index, "operator", e.target.value)
