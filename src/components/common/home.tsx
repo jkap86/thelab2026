@@ -44,9 +44,11 @@ export default function Home({
 
   return (
     <div className="flex flex-col flex-1 relative">
-      <Link href="/tools" className="home">
-        Tools
-      </Link>
+      <div className="flex justify-start">
+        <Link href="/tools" className="home">
+          Tools
+        </Link>
+      </div>
 
       <div className="flex flex-col flex-1 items-center justify-center items-center relative">
         <Image

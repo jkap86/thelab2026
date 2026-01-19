@@ -170,8 +170,7 @@ export async function getADP(filters?: ADPFilters): Promise<ADPResponse> {
     JOIN drafts d ON dp.draft_id = d.draft_id
     WHERE d.league_id IN (SELECT league_id FROM filtered_leagues)
       AND ${snakeDraftConditions.join(" AND ")}
-    GROUP BY dp.player_id
-    HAVING COUNT(*) >= 3;
+    GROUP BY dp.player_id;
   `;
 
   // Query for auction drafts (amounts as % of budget)
