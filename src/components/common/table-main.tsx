@@ -130,7 +130,7 @@ const TableMain = ({
                   key={headerIndex}
                   colSpan={header.colspan}
                   className={
-                    "h-[2rem] bg-radial-gray2 text-[1rem] p-0 " +
+                    "h-[3rem] bg-radial-gray2 text-[1.5rem] p-0 " +
                     (sortBy.column === headerIndex ? " sort icon " : "")
                   }
                 >

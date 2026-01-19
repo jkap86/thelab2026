@@ -11,7 +11,7 @@ const SortIcon = ({
     <div
       className={
         sortBy.column === colNum
-          ? "text-[var(--color1)] bg-[var(--color9)] !shadow-[inset_0_0_1rem_black]"
+          ? "text-[var(--color1)] bg-[var(--color9)] !shadow-[inset_0_0_1rem_black] h-full flex justify-center items-center"
           : "text-gray-400"
       }
       onClick={() =>
