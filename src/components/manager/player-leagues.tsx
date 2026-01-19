@@ -4,7 +4,7 @@ import { Header, Row } from "@/lib/types/common-types";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/redux/store";
 import { setPlayerLeaguesTabState } from "@/redux/manager/manager-slice";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import HeaderModal from "../common/header-modal";
 import { filterLeagueIds } from "@/utils/common/filter-leagues";
 import Avatar from "../common/avatar";
@@ -38,6 +38,19 @@ const PlayerLeagues = ({
     sortBy,
   } = useSelector((state: RootState) => state.manager.tabs.playerLeagues);
   const [isOpen, setIsOpen] = useState(false);
+  const [activeColIndex, setActiveColIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (activeColIndex !== null) {
+      setIsOpen(true);
+    }
+  }, [activeColIndex]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setActiveColIndex(null);
+    }
+  }, [isOpen]);
 
   const headers: Header[] = [
     {
@@ -63,10 +76,10 @@ const PlayerLeagues = ({
             ownedAvailableColumn3,
             ownedAvailableColumn4,
           ]),
-    ].map((col) => ({
+    ].map((col, index) => ({
       text: (
         <div
-          onClick={() => setIsOpen(true)}
+          onClick={() => setActiveColIndex(index)}
           className={
             "cursor-pointer h-full w-full outline-[var(--color3)] outline-[.25rem]  outline-double flex items-center justify-center "
           }
@@ -224,6 +237,7 @@ const PlayerLeagues = ({
               }))
             : []),
         ]}
+        activeColIndex={activeColIndex}
       />
       <div
         className={

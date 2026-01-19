@@ -7,11 +7,13 @@ const HeaderModal = ({
   columns,
   isOpen,
   setIsOpen,
+  activeColIndex,
 }: {
   options: ColumnOption[];
   columns: Column[];
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
+  activeColIndex: number | null;
 }) => {
   const [activeColumnKey, setActiveColumnKey] = useState("");
 
@@ -21,10 +23,20 @@ const HeaderModal = ({
   );
 
   useEffect(() => {
-    if (isOpen && !columns.some((col) => col.key === activeColumnKey)) {
-      setActiveColumnKey(columns[0].key);
+    if (
+      isOpen &&
+      !columns.some((col) => col.key === activeColumnKey) &&
+      activeColIndex !== null
+    ) {
+      setActiveColumnKey(columns[activeColIndex].key);
     }
-  }, [isOpen, columns, activeColumnKey]);
+  }, [isOpen, columns, activeColumnKey, activeColIndex]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setActiveColumnKey("");
+    }
+  }, [isOpen]);
 
   return (
     <>

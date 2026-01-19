@@ -27,7 +27,7 @@ import { Trade } from "@/lib/types/trades-types";
 
 export const dynamic = "force-dynamic";
 
-const CC = "private, max-age=30, stale-while-revalidate=60";
+const CC = "private, max-age=360, stale-while-revalidate=3600";
 
 const CUTOFF = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
 

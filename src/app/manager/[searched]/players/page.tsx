@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import ManagerLayout from "../manager-layout";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/redux/store";
@@ -52,8 +52,21 @@ export default function PlayersPage({
     draftClassFilter,
   } = useSelector((state: RootState) => state.manager.tabs.players);
   const [isOpen, setIsOpen] = useState(false);
+  const [activeColIndex, setActiveColIndex] = useState<number | null>(null);
 
-  console.log({ adp });
+  useEffect(() => {
+    if (activeColIndex !== null) {
+      setIsOpen(true);
+    }
+  }, [activeColIndex]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setActiveColIndex(null);
+    }
+  }, [isOpen]);
+
+  console.log({ activeColIndex });
 
   const headers: Header[] = [
     {
@@ -61,10 +74,10 @@ export default function PlayersPage({
       colspan: 2,
       sort: true,
     },
-    ...[column1, column2, column3, column4].map((col) => ({
+    ...[column1, column2, column3, column4].map((col, index) => ({
       text: (
         <div
-          onClick={() => setIsOpen(true)}
+          onClick={() => setActiveColIndex(index)}
           className={
             "cursor-pointer h-full w-full outline-[var(--color3)] outline-[.25rem]  outline-double flex items-center justify-center "
           }
@@ -283,6 +296,7 @@ export default function PlayersPage({
           },
         }))}
         options={playersColumnOptions}
+        activeColIndex={activeColIndex}
       />
       <div className="flex justify-center text-[1.5rem] mt-6">
         {filters.map((filter) => (

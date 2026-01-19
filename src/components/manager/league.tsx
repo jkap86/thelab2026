@@ -11,7 +11,7 @@ import {
   teamsColumnOptions,
   TeamsColumnKey,
 } from "@/utils/manager/column-options";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Roster from "../common/roster";
 import { setTeamsTabState } from "@/redux/manager/manager-slice";
 import HeaderModal from "../common/header-modal";
@@ -29,6 +29,19 @@ const League = ({
   );
   const [activeRosterId, setActiveRosterId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [activeColIndex, setActiveColIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (activeColIndex !== null) {
+      setIsOpen(true);
+    }
+  }, [activeColIndex]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setActiveColIndex(null);
+    }
+  }, [isOpen]);
 
   const values = Object.fromEntries(
     teamsColumnOptions.map((option) => {
@@ -64,6 +77,7 @@ const League = ({
         }))}
         isOpen={isOpen}
         setIsOpen={setIsOpen}
+        activeColIndex={activeColIndex}
       />
       <div className={"h-[5rem] bg-radial-gray2 "}></div>
       <TableMain
@@ -81,7 +95,7 @@ const League = ({
           {
             text: (
               <div
-                onClick={() => setIsOpen(true)}
+                onClick={() => setActiveColIndex(0)}
                 className={
                   "cursor-pointer h-full w-full outline-[var(--color3)] outline-[.25rem]  outline-double flex items-center justify-center "
                 }
@@ -95,7 +109,7 @@ const League = ({
           {
             text: (
               <div
-                onClick={() => setIsOpen(true)}
+                onClick={() => setActiveColIndex(1)}
                 className={
                   "cursor-pointer h-full w-full outline-[var(--color3)] outline-[.25rem]  outline-double flex items-center justify-center "
                 }

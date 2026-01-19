@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import ManagerLayout from "../manager-layout";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/redux/store";
@@ -30,6 +30,19 @@ export default function LeaguesPage({
     (state: RootState) => state.manager.tabs.leagues
   );
   const [isOpen, setIsOpen] = useState(false);
+  const [activeColIndex, setActiveColIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (activeColIndex !== null) {
+      setIsOpen(true);
+    }
+  }, [activeColIndex]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setActiveColIndex(null);
+    }
+  }, [isOpen]);
 
   const headers: Header[] = [
     {
@@ -37,10 +50,12 @@ export default function LeaguesPage({
       colspan: 3,
       sort: true,
     },
-    ...[column1, column2, column3, column4].map((col) => ({
+    ...[column1, column2, column3, column4].map((col, index) => ({
       text: (
         <div
-          onClick={() => setIsOpen(true)}
+          onClick={() => {
+            setActiveColIndex(index);
+          }}
           className={
             "cursor-pointer h-full w-full outline-[var(--color3)] outline-[.25rem]  outline-double flex items-center justify-center "
           }
@@ -138,6 +153,7 @@ export default function LeaguesPage({
         }))}
         isOpen={isOpen}
         setIsOpen={setIsOpen}
+        activeColIndex={activeColIndex}
       />
       <TableMain
         type={1}
