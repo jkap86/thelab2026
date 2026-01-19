@@ -20,7 +20,7 @@ type OptimalPlayersWeek = {
 
 const weekCutoffs: { [key: string]: number } = {
   "1": new Date("2026-01-13T23:59:59Z").getTime(),
-  "2": new Date("2026-01-19T23:59:59Z").getTime(),
+  "2": new Date("2026-01-18T23:59:59Z").getTime(),
   "3": new Date("2026-01-26T23:59:59Z").getTime(),
 };
 
