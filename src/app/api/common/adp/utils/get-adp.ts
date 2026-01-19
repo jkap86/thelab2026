@@ -78,20 +78,24 @@ export async function getADP(filters?: ADPFilters): Promise<ADPResponse> {
   if (filters?.rosterSlots) {
     const pairs = filters.rosterSlots.split(",").map((p) => p.trim());
     for (const pair of pairs) {
-      const [slot, countStr] = pair.split(":");
-      if (slot && countStr) {
+      // Support new format: "QB=2", "FLEX>1" or legacy format: "QB:2"
+      const match = pair.match(/^([A-Z_+]+)(=|>|<|:)(\d+)$/i);
+      if (match) {
+        const [, slot, op, countStr] = match;
         const slotUpper = slot.toUpperCase();
+        // Treat ":" as "=" for backwards compatibility
+        const operator = op === ":" ? "=" : op;
         // Special case: QB+SF means combined qb_count + super_flex_count
         if (slotUpper === "QB+SF") {
           values.push(parseInt(countStr, 10));
           leagueConditions.push(
-            `qb_count + super_flex_count = $${values.length}`
+            `qb_count + super_flex_count ${operator} $${values.length}`
           );
         } else {
           const column = SLOT_COLUMNS[slotUpper];
           if (column) {
             values.push(parseInt(countStr, 10));
-            leagueConditions.push(`${column} = $${values.length}`);
+            leagueConditions.push(`${column} ${operator} $${values.length}`);
           }
         }
       }

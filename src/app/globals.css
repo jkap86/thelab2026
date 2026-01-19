@@ -110,6 +110,7 @@ input {
 
 select {
   text-align-last: center;
+  appearance: none;
 }
 
 table {

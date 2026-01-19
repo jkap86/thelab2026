@@ -36,7 +36,7 @@ const SCORING_OPTIONS = [
 
 const OPERATORS = ["=", ">", "<"] as const;
 
-type RosterSlot = { position: string; count: number };
+type RosterSlot = { position: string; operator: string; count: number };
 type ScoringFilter = { key: string; operator: string; value: number };
 
 const parseRosterSlots = (str: string | undefined): RosterSlot[] => {
@@ -46,14 +46,22 @@ const parseRosterSlots = (str: string | undefined): RosterSlot[] => {
     .map((p) => p.trim())
     .filter(Boolean)
     .map((pair) => {
-      const [position, countStr] = pair.split(":");
-      return { position, count: parseInt(countStr, 10) || 1 };
-    });
+      // Support new format: "QB=2", "FLEX>1" or legacy format: "QB:2"
+      const match = pair.match(/^([A-Z_+]+)(=|>|<|:)(\d+)$/);
+      if (match) {
+        const [, position, op, countStr] = match;
+        // Treat ":" as "=" for backwards compatibility
+        const operator = op === ":" ? "=" : op;
+        return { position, operator, count: parseInt(countStr, 10) || 1 };
+      }
+      return null;
+    })
+    .filter((s): s is RosterSlot => s !== null);
 };
 
 const serializeRosterSlots = (slots: RosterSlot[]): string | undefined => {
   if (slots.length === 0) return undefined;
-  return slots.map((s) => `${s.position}:${s.count}`).join(",");
+  return slots.map((s) => `${s.position}${s.operator}${s.count}`).join(",");
 };
 
 const parseScoringFilters = (str: string | undefined): ScoringFilter[] => {
@@ -155,7 +163,10 @@ const AdpModal = ({
   };
 
   const addRosterSlot = () => {
-    setRosterSlots((prev) => [...prev, { position: "QB", count: 1 }]);
+    setRosterSlots((prev) => [
+      ...prev,
+      { position: "QB", operator: "=", count: 1 },
+    ]);
   };
 
   const updateRosterSlot = (
@@ -197,11 +208,72 @@ const AdpModal = ({
 
   return (
     <Modal isOpen={isOpen} onClose={() => setIsOpen(false)}>
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 text-[1.25rem] font-chill">
+        {/* Modal Header */}
         <h1 className="text-[2rem] font-score text-center">ADP Filters</h1>
 
+        {/* Loading Spinner & Results */}
+        <div ref={resultsRef}>
+          {isLoading && (
+            <div className="flex justify-center items-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            </div>
+          )}
+
+          {!isLoading && (redraftCounts || dynastyCounts) && (
+            <div className="mt-4 p-4 rounded bg-[var(--color2)]">
+              <h2 className="font-bold text-lg mb-3">Drafts Found</h2>
+              <div className="flex justify-center gap-16">
+                {/* Redraft */}
+                <div className="flex flex-col gap-1">
+                  <span className="font-bold text-[var(--color1)]">
+                    Redraft
+                  </span>
+                  {redraftCounts ? (
+                    <>
+                      <span className="">
+                        Snake: {redraftCounts.snake.toLocaleString()}
+                      </span>
+                      <span className="">
+                        Auction: {redraftCounts.auction.toLocaleString()}
+                      </span>
+                      <span className="font-bold">
+                        Total: {redraftCounts.total.toLocaleString()}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-gray-400">No data</span>
+                  )}
+                </div>
+
+                {/* Dynasty */}
+                <div className="flex flex-col gap-1">
+                  <span className="font-bold text-[var(--color1)]">
+                    Dynasty
+                  </span>
+                  {dynastyCounts ? (
+                    <>
+                      <span className="">
+                        Snake: {dynastyCounts.snake.toLocaleString()}
+                      </span>
+                      <span className="">
+                        Auction: {dynastyCounts.auction.toLocaleString()}
+                      </span>
+                      <span className=" font-bold">
+                        Total: {dynastyCounts.total.toLocaleString()}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-gray-400">No data</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Date Range */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 text-center">
           <label className="font-bold">Date Range</label>
           <div className="flex gap-2 items-center">
             <input
@@ -224,188 +296,202 @@ const AdpModal = ({
           </div>
         </div>
 
-        {/* Format (Best Ball vs Lineup) */}
-        <div className="flex flex-col gap-2">
-          <label className="font-bold">Format</label>
-          <select
-            className="p-2 rounded bg-[var(--color2)] text-white"
-            value={localFilters.bestBall || ""}
-            onChange={(e) =>
-              updateFilter("bestBall", e.target.value || undefined)
-            }
-          >
-            <option value="">All</option>
-            <option value="0">Lineup</option>
-            <option value="1">Best Ball</option>
-          </select>
-        </div>
-
-        {/* Player Type */}
-        <div className="flex flex-col gap-2">
-          <label className="font-bold">Player Type</label>
-          <select
-            className="p-2 rounded bg-[var(--color2)] text-white"
-            value={localFilters.playerType || ""}
-            onChange={(e) =>
-              updateFilter("playerType", e.target.value || undefined)
-            }
-          >
-            <option value="">All</option>
-            <option value="0">All Players</option>
-            <option value="1">Rookies Only</option>
-            <option value="2">Veterans Only</option>
-          </select>
-        </div>
-
-        {/* Teams */}
-        <div className="flex flex-col gap-2">
-          <label className="font-bold">League Size (Teams)</label>
-          <input
-            type="number"
-            className="p-2 rounded bg-[var(--color2)] text-white"
-            placeholder="Any"
-            min={6}
-            max={32}
-            value={localFilters.teams || ""}
-            onChange={(e) =>
-              updateFilter(
-                "teams",
-                e.target.value ? parseInt(e.target.value, 10) : undefined
-              )
-            }
-          />
-        </div>
-
-        {/* Roster Slots */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-4">
-            <label className="font-bold">Roster Slots</label>
-            <button
-              type="button"
-              className="w-8 h-8 flex items-center justify-center rounded bg-[var(--color1)] text-white text-xl hover:opacity-80"
-              onClick={addRosterSlot}
-            >
-              +
-            </button>
-          </div>
+        <div className="flex justify-evenly text-center">
+          {/* Format (Best Ball vs Lineup) */}
           <div className="flex flex-col gap-2">
-            {rosterSlots.map((slot, index) => (
-              <div key={index} className="flex gap-2 items-center">
-                <select
-                  className="flex-1 p-2 rounded bg-[var(--color2)] text-white"
-                  value={slot.position}
-                  onChange={(e) =>
-                    updateRosterSlot(index, "position", e.target.value)
-                  }
-                >
-                  {ROSTER_SLOT_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  className="w-16 p-2 rounded bg-[var(--color2)] text-white text-center"
-                  min={0}
-                  max={10}
-                  value={slot.count}
-                  onChange={(e) =>
-                    updateRosterSlot(
-                      index,
-                      "count",
-                      parseInt(e.target.value, 10) || 0
-                    )
-                  }
-                />
-                <button
-                  type="button"
-                  className="w-8 h-8 flex items-center justify-center rounded bg-red-600 text-white hover:opacity-80"
-                  onClick={() => removeRosterSlot(index)}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            {rosterSlots.length === 0 && (
-              <div className="text-gray-400 text-sm italic">
-                No roster slot filters. Click + to add.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Scoring */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-4">
-            <label className="font-bold">Scoring Settings</label>
-            <button
-              type="button"
-              className="w-8 h-8 flex items-center justify-center rounded bg-[var(--color1)] text-white text-xl hover:opacity-80"
-              onClick={addScoringFilter}
+            <label className="font-bold">Format</label>
+            <select
+              className="p-2 rounded bg-[var(--color2)] text-white"
+              value={localFilters.bestBall || ""}
+              onChange={(e) =>
+                updateFilter("bestBall", e.target.value || undefined)
+              }
             >
-              +
-            </button>
+              <option value="">All</option>
+              <option value="0">Lineup</option>
+              <option value="1">Best Ball</option>
+            </select>
           </div>
+
+          {/* Player Type */}
           <div className="flex flex-col gap-2">
-            {scoringFilters.map((filter, index) => (
-              <div key={index} className="flex gap-2 items-center">
-                <select
-                  className="flex-1 p-2 rounded bg-[var(--color2)] text-white"
-                  value={filter.key}
-                  onChange={(e) =>
-                    updateScoringFilter(index, "key", e.target.value)
-                  }
-                >
-                  {SCORING_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="w-14 p-2 rounded bg-[var(--color2)] text-white text-center"
-                  value={filter.operator}
-                  onChange={(e) =>
-                    updateScoringFilter(index, "operator", e.target.value)
-                  }
-                >
-                  {OPERATORS.map((op) => (
-                    <option key={op} value={op}>
-                      {op}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  className="w-20 p-2 rounded bg-[var(--color2)] text-white text-center"
-                  step="0.1"
-                  value={filter.value}
-                  onChange={(e) =>
-                    updateScoringFilter(
-                      index,
-                      "value",
-                      parseFloat(e.target.value) || 0
-                    )
-                  }
-                />
-                <button
-                  type="button"
-                  className="w-8 h-8 flex items-center justify-center rounded bg-red-600 text-white hover:opacity-80"
-                  onClick={() => removeScoringFilter(index)}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            {scoringFilters.length === 0 && (
-              <div className="text-gray-400 text-sm italic">
-                No scoring filters. Click + to add.
-              </div>
-            )}
+            <label className="font-bold">Player Type</label>
+            <select
+              className="p-2 rounded bg-[var(--color2)] text-white"
+              value={localFilters.playerType || ""}
+              onChange={(e) =>
+                updateFilter("playerType", e.target.value || undefined)
+              }
+            >
+              <option value="">All</option>
+              <option value="0">All Players</option>
+              <option value="1">Rookies Only</option>
+              <option value="2">Veterans Only</option>
+            </select>
+          </div>
+
+          {/* Teams */}
+          <div className="flex flex-col gap-2">
+            <label className="font-bold">Teams</label>
+            <input
+              type="number"
+              className="p-2 rounded bg-[var(--color2)] text-white"
+              placeholder="Any"
+              min={6}
+              max={32}
+              value={localFilters.teams || ""}
+              onChange={(e) =>
+                updateFilter(
+                  "teams",
+                  e.target.value ? parseInt(e.target.value, 10) : undefined
+                )
+              }
+            />
           </div>
         </div>
 
+        <div className="flex justify-evenly">
+          {/* Roster Slots */}
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-center items-center gap-4">
+              <label className="font-bold">Roster Slots</label>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              {rosterSlots.map((slot, index) => (
+                <div
+                  key={index}
+                  className="flex items-center bg-[var(--color8)] p-2 rounded"
+                >
+                  <select
+                    className="flex-1 p-2 rounded bg-[var(--color2)] text-white"
+                    value={slot.position}
+                    onChange={(e) =>
+                      updateRosterSlot(index, "position", e.target.value)
+                    }
+                  >
+                    {ROSTER_SLOT_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="w-fit p-2 mx-1 rounded bg-[var(--color2)] text-white text-center"
+                    value={slot.operator}
+                    onChange={(e) =>
+                      updateRosterSlot(index, "operator", e.target.value)
+                    }
+                  >
+                    {OPERATORS.map((op) => (
+                      <option key={op} value={op}>
+                        {op}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    className="w-16 p-2 rounded bg-[var(--color2)] text-white text-center"
+                    min={0}
+                    max={10}
+                    value={slot.count}
+                    onChange={(e) =>
+                      updateRosterSlot(
+                        index,
+                        "count",
+                        parseInt(e.target.value, 10) || 0
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="ml-1 w-8 h-8 flex items-center justify-center rounded bg-red-600 text-white hover:opacity-80"
+                    onClick={() => removeRosterSlot(index)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                className="w-8 h-8 flex items-center justify-center rounded bg-[var(--color1)] text-white text-xl hover:opacity-80"
+                onClick={addRosterSlot}
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          {/* Scoring */}
+          <div className="flex flex-col gap-2 w-[50%]">
+            <div className="flex justify-center items-center gap-4">
+              <label className="font-bold">Scoring Settings</label>
+            </div>
+            <div className="flex flex-col gap-2 items-center">
+              {scoringFilters.map((filter, index) => (
+                <div
+                  key={index}
+                  className="flex items-center bg-[var(--color8)] p-2 rounded"
+                >
+                  <select
+                    className="flex-1 p-2 rounded bg-[var(--color2)] text-white"
+                    value={filter.key}
+                    onChange={(e) =>
+                      updateScoringFilter(index, "key", e.target.value)
+                    }
+                  >
+                    {SCORING_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="w-fit p-2 mx-1 rounded bg-[var(--color2)] text-white text-center"
+                    value={filter.operator}
+                    onChange={(e) =>
+                      updateScoringFilter(index, "operator", e.target.value)
+                    }
+                  >
+                    {OPERATORS.map((op) => (
+                      <option key={op} value={op}>
+                        {op}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    className="w-20 p-2 rounded bg-[var(--color2)] text-white text-center"
+                    step="0.1"
+                    value={filter.value}
+                    onChange={(e) =>
+                      updateScoringFilter(
+                        index,
+                        "value",
+                        parseFloat(e.target.value) || 0
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="ml-1 w-8 h-8 flex items-center justify-center rounded bg-red-600 text-white hover:opacity-80"
+                    onClick={() => removeScoringFilter(index)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                className="w-8 h-8 flex items-center justify-center rounded bg-[var(--color1)] text-white text-xl hover:opacity-80"
+                onClick={addScoringFilter}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
         {/* Fetch Button */}
         <button
           type="button"
@@ -418,62 +504,6 @@ const AdpModal = ({
         >
           {isLoading ? "Loading..." : "Fetch ADP"}
         </button>
-
-        {/* Loading Spinner & Results */}
-        <div ref={resultsRef}>
-          {isLoading && (
-            <div className="flex justify-center items-center py-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-            </div>
-          )}
-
-          {hasFetched && !isLoading && (redraftCounts || dynastyCounts) && (
-            <div className="mt-4 p-4 rounded bg-[var(--color2)]">
-              <h2 className="font-bold text-lg mb-3">Drafts Found</h2>
-              <div className="grid grid-cols-2 gap-4">
-                {/* Redraft */}
-                <div className="flex flex-col gap-1">
-                  <span className="font-bold text-[var(--color1)]">Redraft</span>
-                  {redraftCounts ? (
-                    <>
-                      <span className="text-sm">
-                        Snake: {redraftCounts.snake.toLocaleString()}
-                      </span>
-                      <span className="text-sm">
-                        Auction: {redraftCounts.auction.toLocaleString()}
-                      </span>
-                      <span className="text-sm font-bold">
-                        Total: {redraftCounts.total.toLocaleString()}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-sm text-gray-400">No data</span>
-                  )}
-                </div>
-
-                {/* Dynasty */}
-                <div className="flex flex-col gap-1">
-                  <span className="font-bold text-[var(--color1)]">Dynasty</span>
-                  {dynastyCounts ? (
-                    <>
-                      <span className="text-sm">
-                        Snake: {dynastyCounts.snake.toLocaleString()}
-                      </span>
-                      <span className="text-sm">
-                        Auction: {dynastyCounts.auction.toLocaleString()}
-                      </span>
-                      <span className="text-sm font-bold">
-                        Total: {dynastyCounts.total.toLocaleString()}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-sm text-gray-400">No data</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </Modal>
   );
