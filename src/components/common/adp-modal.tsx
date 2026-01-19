@@ -224,22 +224,6 @@ const AdpModal = ({
           </div>
         </div>
 
-        {/* Draft Type */}
-        <div className="flex flex-col gap-2">
-          <label className="font-bold">Draft Type</label>
-          <select
-            className="p-2 rounded bg-[var(--color2)] text-white"
-            value={localFilters.draftType || ""}
-            onChange={(e) =>
-              updateFilter("draftType", e.target.value || undefined)
-            }
-          >
-            <option value="">All</option>
-            <option value="snake">Snake</option>
-            <option value="auction">Auction</option>
-          </select>
-        </div>
-
         {/* Format (Best Ball vs Lineup) */}
         <div className="flex flex-col gap-2">
           <label className="font-bold">Format</label>
