@@ -4,7 +4,7 @@ import { AppDispatch, RootState } from "@/redux/store";
 import { useEffect, useRef, useMemo } from "react";
 
 // Helper to get ISO date string for N days ago
-const getDaysAgo = (days: number): string => {
+export const getDaysAgo = (days: number): string => {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return date.toISOString().split("T")[0];
@@ -12,14 +12,14 @@ const getDaysAgo = (days: number): string => {
 
 export default function useFetchAdp() {
   const dispatch: AppDispatch = useDispatch();
-  const { adp } = useSelector((state: RootState) => state.common);
+  const { adp, adpFilters } = useSelector((state: RootState) => state.common);
   const redraftFetchedRef = useRef(false);
   const dynastyFetchedRef = useRef(false);
 
-  const startDate = useMemo(() => getDaysAgo(14), []);
-
   const hasRedraft = !!adp.redraft;
   const hasDynasty = !!adp.dynasty;
+
+  console.log({ adp });
 
   // Fetch redraft ADP
   useEffect(() => {
@@ -30,14 +30,12 @@ export default function useFetchAdp() {
       fetchADP({
         key: "redraft",
         filters: {
+          ...adpFilters,
           leagueType: "0",
-          superflex: true,
-          teams: 12,
-          startDate,
         },
       })
     );
-  }, [hasRedraft, dispatch, startDate]);
+  }, [hasRedraft, dispatch, adpFilters]);
 
   // Fetch dynasty ADP
   useEffect(() => {
@@ -48,12 +46,10 @@ export default function useFetchAdp() {
       fetchADP({
         key: "dynasty",
         filters: {
+          ...adpFilters,
           leagueType: "2",
-          superflex: true,
-          teams: 12,
-          startDate,
         },
       })
     );
-  }, [hasDynasty, dispatch, startDate]);
+  }, [hasDynasty, dispatch, adpFilters]);
 }

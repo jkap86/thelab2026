@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
     startDate: searchParams.get("startDate") ?? undefined,
     endDate: searchParams.get("endDate") ?? undefined,
     leagueType: searchParams.get("leagueType") ?? undefined,
+    bestBall: searchParams.get("bestBall") ?? undefined,
     draftType: searchParams.get("draftType") ?? undefined,
     playerType: searchParams.get("playerType") ?? undefined,
     rosterSlots: searchParams.get("rosterSlots") ?? undefined,

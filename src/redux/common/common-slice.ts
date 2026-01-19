@@ -1,9 +1,10 @@
-import { createSlice } from "@reduxjs/toolkit";
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import {
   Allplayer,
   NflState,
   PlayerADP,
   ADPFilters,
+  ADPResponse,
 } from "@/lib/types/common-types";
 import {
   fetchAllplayers,
@@ -11,6 +12,7 @@ import {
   fetchKtcCurrent,
   fetchADP,
 } from "./common-actions";
+import { getDaysAgo } from "@/hooks/common/useFetchAdp";
 
 export const serializeFilters = (filters?: ADPFilters): string => {
   if (!filters) return "";
@@ -18,6 +20,7 @@ export const serializeFilters = (filters?: ADPFilters): string => {
   if (filters.startDate) params.set("startDate", filters.startDate);
   if (filters.endDate) params.set("endDate", filters.endDate);
   if (filters.leagueType) params.set("leagueType", filters.leagueType);
+  if (filters.bestBall) params.set("bestBall", filters.bestBall);
   if (filters.draftType) params.set("draftType", filters.draftType);
   if (filters.playerType) params.set("playerType", filters.playerType);
   if (filters.rosterSlots) params.set("rosterSlots", filters.rosterSlots);
@@ -35,6 +38,8 @@ export interface CommonState {
     player_values: { [player_id: string]: number };
   } | null;
   adp: Record<string, Record<string, PlayerADP>>;
+  adpDraftCounts: Record<string, ADPResponse["draftCounts"]>;
+  adpFilters: ADPFilters;
   isLoadingCommon: string[];
   errorCommon: string[];
 }
@@ -44,6 +49,19 @@ const initialState: CommonState = {
   allplayers: null,
   ktcCurrent: null,
   adp: {},
+  adpDraftCounts: {},
+  adpFilters: {
+    startDate: getDaysAgo(14),
+    endDate: undefined,
+    leagueType: undefined,
+    bestBall: undefined,
+    draftType: undefined,
+    playerType: undefined,
+    rosterSlots: undefined,
+    scoring: undefined,
+    superflex: undefined,
+    teams: 12,
+  },
   isLoadingCommon: [],
   errorCommon: [],
 };
@@ -54,6 +72,10 @@ const commonSlice = createSlice({
   reducers: {
     clearAdpCache: (state) => {
       state.adp = {};
+      state.adpDraftCounts = {};
+    },
+    updateAdpFilters: (state, action: PayloadAction<Partial<ADPFilters>>) => {
+      state.adpFilters = { ...state.adpFilters, ...action.payload };
     },
   },
   extraReducers: (builder) => {
@@ -131,12 +153,11 @@ const commonSlice = createSlice({
     builder
       .addCase(fetchADP.pending, (state) => {
         state.isLoadingCommon.push("adp");
-        state.errorCommon = state.errorCommon.filter(
-          (item) => item !== "adp"
-        );
+        state.errorCommon = state.errorCommon.filter((item) => item !== "adp");
       })
       .addCase(fetchADP.fulfilled, (state, action) => {
-        state.adp[action.meta.arg.key] = action.payload;
+        state.adp[action.meta.arg.key] = action.payload.players;
+        state.adpDraftCounts[action.meta.arg.key] = action.payload.draftCounts;
 
         state.isLoadingCommon = state.isLoadingCommon.filter(
           (item) => item !== "adp"
@@ -154,5 +175,5 @@ const commonSlice = createSlice({
   },
 });
 
-export const { clearAdpCache } = commonSlice.actions;
+export const { clearAdpCache, updateAdpFilters } = commonSlice.actions;
 export default commonSlice.reducer;

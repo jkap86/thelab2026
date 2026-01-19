@@ -4,6 +4,7 @@ import {
   NflState,
   PlayerADP,
   ADPFilters,
+  ADPResponse,
 } from "@/lib/types/common-types";
 import { createAsyncThunk } from "@reduxjs/toolkit";
 import axiosInstance from "@/lib/axios-instance";
@@ -100,7 +101,7 @@ export const fetchKtcCurrent = createAsyncThunk<
 });
 
 export const fetchADP = createAsyncThunk<
-  Record<string, PlayerADP>,
+  { players: Record<string, PlayerADP>; draftCounts: ADPResponse["draftCounts"] },
   { key: string; filters?: ADPFilters; signal?: AbortSignal },
   { rejectValue: Reject }
 >("common/fetchADP", async ({ filters, signal }, { rejectWithValue }) => {
@@ -111,6 +112,7 @@ export const fetchADP = createAsyncThunk<
       if (filters.startDate) params.set("startDate", filters.startDate);
       if (filters.endDate) params.set("endDate", filters.endDate);
       if (filters.leagueType) params.set("leagueType", filters.leagueType);
+      if (filters.bestBall) params.set("bestBall", filters.bestBall);
       if (filters.draftType) params.set("draftType", filters.draftType);
       if (filters.playerType) params.set("playerType", filters.playerType);
       if (filters.rosterSlots) params.set("rosterSlots", filters.rosterSlots);
@@ -122,13 +124,16 @@ export const fetchADP = createAsyncThunk<
     const queryString = params.toString();
     const url = `/api/common/adp${queryString ? `?${queryString}` : ""}`;
 
-    const response: { data: PlayerADP[] } = await axiosInstance.get(url, {
+    const response: { data: ADPResponse } = await axiosInstance.get(url, {
       signal,
     });
 
-    return Object.fromEntries(
-      response.data.map((player) => [player.player_id, player])
-    );
+    return {
+      players: Object.fromEntries(
+        response.data.players.map((player) => [player.player_id, player])
+      ),
+      draftCounts: response.data.draftCounts,
+    };
   } catch (error: unknown) {
     if (["AbortError", "CanceledError"].includes((error as AxiosError).name)) {
       return rejectWithValue({

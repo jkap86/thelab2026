@@ -1,4 +1,4 @@
-import { JSX, useRef, useEffect, useCallback } from "react";
+import { JSX, useRef, useEffect } from "react";
 import ReactDOM from "react-dom";
 
 const Modal = ({
@@ -10,69 +10,64 @@ const Modal = ({
   onClose: () => void;
   children: JSX.Element;
 }) => {
-  const modalRef = useRef<HTMLDivElement>(null);
+  const portalRef = useRef<HTMLDivElement | null>(null);
 
-  const modalRoot =
-    typeof window === "undefined"
-      ? null
-      : document.getElementById("modal-root");
-
+  // Create portal element ONCE on mount
   useEffect(() => {
-    if (!modalRef.current) {
-      modalRef.current = document.createElement("div");
+    const el = document.createElement("div");
+    const modalRoot = document.getElementById("modal-root");
+    if (modalRoot) {
+      modalRoot.appendChild(el);
     }
-  });
+    portalRef.current = el;
 
-  // Lock background scroll (no one‑way bounce) by using position:fixed
+    return () => {
+      if (el.parentElement) {
+        el.parentElement.removeChild(el);
+      }
+    };
+  }, []); // Empty deps = only on mount/unmount
+
+  // Lock body scroll when open
   useEffect(() => {
     if (!isOpen) return;
 
-    // 1️⃣ Remember where we were
     const scrollY = window.scrollY;
-
-    // 2️⃣ Fix the body in place
     document.body.style.position = "fixed";
     document.body.style.top = `-${scrollY}px`;
     document.body.style.left = "0";
     document.body.style.right = "0";
 
     return () => {
-      // 3️⃣ Unfix, restore original position
       document.body.style.position = "";
       document.body.style.top = "";
-      // 4️⃣ Jump back to where you were
       window.scrollTo(0, scrollY);
     };
   }, [isOpen]);
 
-  // mount/unmount to modal-root
-  useEffect(() => {
-    if (isOpen && modalRoot && modalRef.current) {
-      modalRoot.appendChild(modalRef.current);
-      return () => {
-        modalRoot.removeChild(modalRef.current!);
-      };
-    }
-  }, [isOpen, modalRoot]);
-
-  if (!isOpen || !modalRef.current) return null;
+  if (!isOpen || !portalRef.current) return null;
 
   return ReactDOM.createPortal(
     <div
       className="w-full h-full flex justify-center items-center bg-[rgba(0,0,0,.5)] fixed z-100 top-0 left-0 right-0 bottom-0"
-      onClick={() => onClose()}
+      onMouseDown={(e) => {
+        // Only close if mousedown is directly on backdrop
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className={
           "bg-[var(--color3)] min-w-[80dvmin] w-[20rem] h-[70dvh] max-h-fit rounded-[2rem] overflow-auto " +
           "shadow-[0_0_1rem_gray,inset_0_0_2rem_black] outline-double outline-[var(--color1)] outline-[.25rem] p-8"
         }
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         {children}
       </div>
     </div>,
-    modalRef.current
+    portalRef.current
   );
 };
 

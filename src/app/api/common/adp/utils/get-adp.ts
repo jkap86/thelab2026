@@ -1,5 +1,5 @@
 import pool from "@/lib/pool";
-import { ADPFilters, PlayerADP } from "@/lib/types/common-types";
+import { ADPFilters, PlayerADP, ADPResponse } from "@/lib/types/common-types";
 
 // Map slot names to materialized column names
 const SLOT_COLUMNS: Record<string, string> = {
@@ -23,7 +23,7 @@ const SLOT_COLUMNS: Record<string, string> = {
   IDP: "idp_count",
 };
 
-export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
+export async function getADP(filters?: ADPFilters): Promise<ADPResponse> {
   // Build common conditions for leagues
   const leagueConditions: string[] = [];
   const baseDraftConditions: string[] = ["d.status = 'complete'"];
@@ -39,10 +39,23 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
     baseDraftConditions.push(`d.start_time <= $${values.length}`);
   }
 
-  // League type filter (on leagues)
+  // League type filter (on leagues) - 0=redraft, 1=keeper, 2=dynasty
   if (filters?.leagueType) {
     values.push(filters.leagueType);
     leagueConditions.push(`settings ->> 'type' = $${values.length}`);
+  }
+
+  // Best ball filter (on leagues) - 0=lineup, 1=best_ball
+  if (filters?.bestBall) {
+    if (filters.bestBall === "0") {
+      // 0 means lineup - match '0' OR null/missing
+      leagueConditions.push(
+        `(settings ->> 'best_ball' = '0' OR settings ->> 'best_ball' IS NULL)`
+      );
+    } else {
+      values.push(filters.bestBall);
+      leagueConditions.push(`settings ->> 'best_ball' = $${values.length}`);
+    }
   }
 
   // Player type filter (on drafts settings)
@@ -67,10 +80,19 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
     for (const pair of pairs) {
       const [slot, countStr] = pair.split(":");
       if (slot && countStr) {
-        const column = SLOT_COLUMNS[slot.toUpperCase()];
-        if (column) {
+        const slotUpper = slot.toUpperCase();
+        // Special case: QB+SF means combined qb_count + super_flex_count
+        if (slotUpper === "QB+SF") {
           values.push(parseInt(countStr, 10));
-          leagueConditions.push(`${column} = $${values.length}`);
+          leagueConditions.push(
+            `qb_count + super_flex_count = $${values.length}`
+          );
+        } else {
+          const column = SLOT_COLUMNS[slotUpper];
+          if (column) {
+            values.push(parseInt(countStr, 10));
+            leagueConditions.push(`${column} = $${values.length}`);
+          }
         }
       }
     }
@@ -174,11 +196,43 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
     HAVING COUNT(*) >= 3;
   `;
 
-  // Run both queries in parallel
-  const [snakeResult, auctionResult] = await Promise.all([
-    pool.query(snakeQuery, values),
-    pool.query(auctionQuery, values),
-  ]);
+  // Query to count unique drafts
+  const snakeCountQuery = `
+    WITH filtered_leagues AS (
+      SELECT league_id
+      FROM leagues
+      ${leagueWhere}
+    )
+    SELECT COUNT(DISTINCT d.draft_id)::int as count
+    FROM drafts d
+    WHERE d.league_id IN (SELECT league_id FROM filtered_leagues)
+      AND ${snakeDraftConditions.join(" AND ")};
+  `;
+
+  const auctionCountQuery = `
+    WITH filtered_leagues AS (
+      SELECT league_id
+      FROM leagues
+      ${leagueWhere}
+    )
+    SELECT COUNT(DISTINCT d.draft_id)::int as count
+    FROM drafts d
+    WHERE d.league_id IN (SELECT league_id FROM filtered_leagues)
+      AND ${auctionDraftConditions.join(" AND ")}
+      AND (d.settings ->> 'budget')::int > 0;
+  `;
+
+  // Run all queries in parallel
+  const [snakeResult, auctionResult, snakeCountResult, auctionCountResult] =
+    await Promise.all([
+      pool.query(snakeQuery, values),
+      pool.query(auctionQuery, values),
+      pool.query(snakeCountQuery, values),
+      pool.query(auctionCountQuery, values),
+    ]);
+
+  const snakeCount = snakeCountResult.rows[0]?.count ?? 0;
+  const auctionCount = auctionCountResult.rows[0]?.count ?? 0;
 
   // Create a map of auction amounts by player_id
   const auctionMap = new Map<
@@ -222,5 +276,12 @@ export async function getADP(filters?: ADPFilters): Promise<PlayerADP[]> {
   // Sort by avg_pick
   combined.sort((a, b) => (a.avg_pick ?? 0) - (b.avg_pick ?? 0));
 
-  return combined;
+  return {
+    players: combined,
+    draftCounts: {
+      snake: snakeCount,
+      auction: auctionCount,
+      total: snakeCount + auctionCount,
+    },
+  };
 }

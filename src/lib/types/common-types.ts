@@ -81,16 +81,26 @@ export type PlayerADP = {
   amount_count: number;
 };
 
+export type ADPResponse = {
+  players: PlayerADP[];
+  draftCounts: {
+    snake: number;
+    auction: number;
+    total: number;
+  };
+};
+
 export type ADPFilters = {
-  startDate?: string;
-  endDate?: string;
-  leagueType?: string;
-  draftType?: string;
-  playerType?: string;
-  rosterSlots?: string;
-  scoring?: string;
-  superflex?: boolean;
-  teams?: number;
+  startDate: string | undefined;
+  endDate: string | undefined;
+  leagueType: string | undefined; // 0=redraft, 1=keeper, 2=dynasty (settings.type)
+  bestBall: string | undefined; // 0=lineup, 1=best_ball (settings.best_ball)
+  draftType: string | undefined;
+  playerType: string | undefined;
+  rosterSlots: string | undefined;
+  scoring: string | undefined;
+  superflex: boolean | undefined;
+  teams: number | undefined;
 };
 
 export type OptimalPlayer = {

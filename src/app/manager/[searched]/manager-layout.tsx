@@ -50,7 +50,8 @@ export default function ManagerLayout({
             <div key={error}>{error}</div>
           ))}
         </div>
-      ) : isLoadingCommon.length > 0 || isLoadingUser ? (
+      ) : isLoadingCommon.filter((item) => item !== "adp").length > 0 ||
+        isLoadingUser ? (
         <div className="flex flex-1">
           <LoadingIcon />
         </div>

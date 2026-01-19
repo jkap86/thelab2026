@@ -6,6 +6,8 @@ import Avatar from "../common/avatar";
 import LeagueFiltersSwitch from "../common/league-filters-switch";
 import { setType1, setType2 } from "@/redux/manager/manager-slice";
 import { filterLeagueIds } from "@/utils/common/filter-leagues";
+import { useState } from "react";
+import AdpModal from "../common/adp-modal";
 
 const Heading = () => {
   const pathname = usePathname();
@@ -14,66 +16,81 @@ const Heading = () => {
   const { user, leagues, type1, type2 } = useSelector(
     (state: RootState) => state.manager
   );
+  const [isOpen, setIsOpen] = useState(false);
 
-  if (!user) return null;
-
+  // Always render AdpModal first to prevent unmounting during state changes
   return (
-    <div className="relative max-w-[100dvmin] m-auto">
-      <Link href={"/manager"} className="home">
-        Manager Home
-      </Link>
-
-      <div className="text-center h-[7rem] text-[3rem] font-pulang mb-[2rem] m-auto text-[var(--color1)] font-black">
-        <Avatar
-          avatar_id={user.avatar}
-          type="user"
-          name={user.username}
-          centered={true}
-        />
-      </div>
-
-      <div className="">
-        <LeagueFiltersSwitch
-          type1={type1}
-          type2={type2}
-          setType1={(value) => dispatch(setType1(value))}
-          setType2={(value) => dispatch(setType2(value))}
-        />
-      </div>
-
-      {leagues && (
-        <div className="text-[1.5rem] text-[var(--color7)] m-4 font-score flex justify-center">
-          <div>
-            {
-              filterLeagueIds(Object.keys(leagues), { type1, type2, leagues })
-                .length
-            }{" "}
-            Leagues
+    <>
+      <AdpModal isOpen={isOpen} setIsOpen={setIsOpen} />
+      {user && (
+        <>
+          <div className="flex justify-between items-center">
+            <Link href={"/manager"} className="home">
+              Manager Home
+            </Link>
+            <i
+              onClick={() => setIsOpen(true)}
+              className="fa-solid fa-gear text-[2rem] p-8 cursor-pointer hover:text-[var(--color1)] text-[var(--color3)]"
+            ></i>
           </div>
-        </div>
-      )}
+          <div className="relative max-w-[100dvmin] m-auto">
+            <div className="text-center h-[7rem] text-[3rem] font-pulang mb-[2rem] m-auto text-[var(--color1)] font-black">
+              <Avatar
+                avatar_id={user.avatar}
+                type="user"
+                name={user.username}
+                centered={true}
+              />
+            </div>
 
-      <div className="flex justify-center">
-        <select
-          value={pathname.split("/")[3].replace("-", " ").toUpperCase()}
-          onChange={(e) =>
-            user &&
-            router.push(
-              `/manager/${user.username}/${e.target.value
-                .replace(" ", "-")
-                .toLowerCase()}`
-            )
-          }
-          className="text-[1.5rem] !text-center font-hugmate text-[var(--color1)]"
-        >
-          {["LEAGUES", "PLAYERS", "LEAGUEMATES"].map((option) => (
-            <option key={option} value={option} className="text-center">
-              {option}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
+            <div className="">
+              <LeagueFiltersSwitch
+                type1={type1}
+                type2={type2}
+                setType1={(value) => dispatch(setType1(value))}
+                setType2={(value) => dispatch(setType2(value))}
+              />
+            </div>
+
+            {leagues && (
+              <div className="text-[1.5rem] text-[var(--color7)] m-4 font-score flex justify-center">
+                <div>
+                  {
+                    filterLeagueIds(Object.keys(leagues), {
+                      type1,
+                      type2,
+                      leagues,
+                    }).length
+                  }{" "}
+                  Leagues
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-center">
+              <select
+                value={pathname.split("/")[3].replace("-", " ").toUpperCase()}
+                onChange={(e) =>
+                  user &&
+                  router.push(
+                    `/manager/${user.username}/${e.target.value
+                      .replace(" ", "-")
+                      .toLowerCase()}`
+                  )
+                }
+                className="text-[1.5rem] !text-center font-hugmate text-[var(--color1)]"
+              >
+                {["LEAGUES", "PLAYERS", "LEAGUEMATES"].map((option) => (
+                  <option key={option} value={option} className="text-center">
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </>
+      )}
+    </>
   );
 };
 
