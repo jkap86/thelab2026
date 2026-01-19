@@ -246,20 +246,26 @@ const TradesPage = () => {
             onButtonClick={() =>
               dispatch(fetchLeaguemates({ username: usernameInput }))
             }
-            buttonText="Search"
+            buttonText="Fetch"
             disabled={
               !usernameInput ||
               usernameInput === username ||
               isLoadingLeaguemates
             }
           />
-          {username &&
-            usernameInput === username &&
-            leaguemateIds.length > 0 && (
-              <div className="text-[1.25rem] text-[var(--color1)]  font-score">
-                {leaguemateIds.length} leaguemates
-              </div>
-            )}
+          {
+            <div className="text-[1.25rem] text-[var(--color7)] mt-4 font-score">
+              {!usernameInput.trim() && !username && !isLoadingLeaguemates ? (
+                <span>Enter username to fetch leaguemates</span>
+              ) : isLoadingLeaguemates ? (
+                "Loading leaguemates..."
+              ) : username ? (
+                `${leaguemateIds.length} leaguemates fetched for ${username}`
+              ) : (
+                ""
+              )}
+            </div>
+          }
         </div>
       )}
       <div className="flex flex-col items-center">

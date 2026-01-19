@@ -19,9 +19,9 @@ type OptimalPlayersWeek = {
 };
 
 const weekCutoffs: { [key: string]: number } = {
-  "1": new Date("2024-01-13T23:59:59Z").getTime(),
-  "2": new Date("2024-01-20T23:59:59Z").getTime(),
-  "3": new Date("2024-01-27T23:59:59Z").getTime(),
+  "1": new Date("2026-01-13T23:59:59Z").getTime(),
+  "2": new Date("2026-01-19T23:59:59Z").getTime(),
+  "3": new Date("2026-01-26T23:59:59Z").getTime(),
 };
 
 const CC = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=3600";
