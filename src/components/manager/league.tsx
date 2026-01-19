@@ -72,11 +72,11 @@ const League = ({
         headers={[
           {
             text: <div>Rk</div>,
-            colspan: 1,
+            colspan: 2,
           },
           {
             text: <div>Manager</div>,
-            colspan: 4,
+            colspan: 5,
           },
           {
             text: (
@@ -89,7 +89,7 @@ const League = ({
                 {column1}
               </div>
             ),
-            colspan: 2,
+            colspan: 4,
             sort: true,
           },
           {
@@ -103,7 +103,7 @@ const League = ({
                 {column2}
               </div>
             ),
-            colspan: 2,
+            colspan: 4,
             sort: true,
           },
         ]}
@@ -113,12 +113,12 @@ const League = ({
             columns: [
               {
                 text: <div>INDEX</div>,
-                colspan: 1,
+                colspan: 2,
                 className: "font-chill text-center text-[1.25rem]",
               },
               {
                 text: (
-                  <div className="font-chill text-[1.75rem]">
+                  <div className="font-chill text-[1.5rem]">
                     <Avatar
                       avatar_id={roster.avatar}
                       type="user"
@@ -126,7 +126,7 @@ const League = ({
                     />
                   </div>
                 ),
-                colspan: 4,
+                colspan: 5,
               },
               ...[column1, column2].map((col) => {
                 const o = teamsColumnOptions.find(
@@ -137,7 +137,7 @@ const League = ({
 
                 return {
                   text: <div>{value?.toLocaleString("en-US")}</div>,
-                  colspan: 2,
+                  colspan: 4,
                   className: "text-center " + o?.className,
                   style:
                     (o &&
@@ -174,7 +174,7 @@ const League = ({
         <TableMain
           type={type}
           half={true}
-          headers={[{ text: <div>Scoring Settings</div>, colspan: 2 }]}
+          headers={[{ text: <div>Scoring Settings</div>, colspan: 8 }]}
           data={Object.keys(league.scoring_settings)
             .filter(
               (cat) =>
@@ -209,7 +209,7 @@ const League = ({
                         {cat.replace(/_/g, " ")}
                       </div>
                     ),
-                    colspan: 1,
+                    colspan: 5,
                     className,
                   },
                   {
@@ -220,7 +220,7 @@ const League = ({
                         })}
                       </div>
                     ),
-                    colspan: 1,
+                    colspan: 3,
                     className,
                   },
                 ],
