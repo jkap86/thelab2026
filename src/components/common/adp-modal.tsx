@@ -24,6 +24,7 @@ const ROSTER_SLOT_OPTIONS = [
   "IDP_FLEX",
   "BN",
   "QB+SF",
+  "STARTER",
 ];
 
 const SCORING_OPTIONS = [
@@ -234,44 +235,50 @@ const AdpModal = ({
               <h2 className="font-bold text-lg mb-3">Drafts Found</h2>
               <div className="flex justify-center gap-16">
                 {/* Redraft */}
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col items-center gap-1">
                   <span className="font-bold text-[var(--color1)]">
                     Redraft
                   </span>
                   {redraftCounts ? (
-                    <>
-                      <span className="">
-                        Snake: {redraftCounts.snake.toLocaleString()}
-                      </span>
-                      <span className="">
-                        Auction: {redraftCounts.auction.toLocaleString()}
-                      </span>
-                      <span className="font-bold">
-                        Total: {redraftCounts.total.toLocaleString()}
-                      </span>
-                    </>
+                    <div className="flex">
+                      <div className="flex flex-col gap-1 items-center mx-2">
+                        <span>Snake</span>
+                        <span className="text-[var(--color7)] font-black">
+                          {redraftCounts.snake.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1 items-center mx-2">
+                        <span>Auction</span>
+                        <span className="text-[var(--color7)] font-black">
+                          {redraftCounts.auction.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
                   ) : (
                     <span className="text-gray-400">No data</span>
                   )}
                 </div>
 
                 {/* Dynasty */}
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col items-center gap-1">
                   <span className="font-bold text-[var(--color1)]">
                     Dynasty
                   </span>
                   {dynastyCounts ? (
-                    <>
-                      <span className="">
-                        Snake: {dynastyCounts.snake.toLocaleString()}
-                      </span>
-                      <span className="">
-                        Auction: {dynastyCounts.auction.toLocaleString()}
-                      </span>
-                      <span className=" font-bold">
-                        Total: {dynastyCounts.total.toLocaleString()}
-                      </span>
-                    </>
+                    <div className="flex">
+                      <div className="flex flex-col gap-1 items-center mx-2">
+                        <span>Snake</span>
+                        <span className="text-[var(--color7)] font-black">
+                          {dynastyCounts.snake.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1 items-center mx-2">
+                        <span>Auction</span>
+                        <span className="text-[var(--color7)] font-black">
+                          {dynastyCounts.auction.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
                   ) : (
                     <span className="text-gray-400">No data</span>
                   )}
@@ -346,7 +353,7 @@ const AdpModal = ({
               type="number"
               className="p-2 rounded bg-[var(--color2)] text-white"
               placeholder="Any"
-              min={6}
+              min={4}
               max={32}
               value={localFilters.teams || ""}
               onChange={(e) =>
@@ -401,7 +408,7 @@ const AdpModal = ({
                     type="number"
                     className="w-16 p-2 rounded bg-[var(--color2)] text-white text-center"
                     min={0}
-                    max={10}
+                    max={50}
                     value={slot.count}
                     onChange={(e) =>
                       updateRosterSlot(
@@ -451,7 +458,7 @@ const AdpModal = ({
                   >
                     {SCORING_OPTIONS.map((opt) => (
                       <option key={opt} value={opt}>
-                        {opt}
+                        {opt.replaceAll("_", " ")}
                       </option>
                     ))}
                   </select>

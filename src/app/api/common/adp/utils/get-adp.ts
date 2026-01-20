@@ -91,6 +91,16 @@ export async function getADP(filters?: ADPFilters): Promise<ADPResponse> {
           leagueConditions.push(
             `COALESCE(qb_count, 0) + COALESCE(super_flex_count, 0) ${operator} $${values.length}`
           );
+        } else if (slotUpper === "STARTER") {
+          // STARTER = all slots except BN
+          values.push(parseInt(countStr, 10));
+          leagueConditions.push(
+            `COALESCE(qb_count, 0) + COALESCE(rb_count, 0) + COALESCE(wr_count, 0) + ` +
+              `COALESCE(te_count, 0) + COALESCE(flex_count, 0) + COALESCE(super_flex_count, 0) + ` +
+              `COALESCE(rec_flex_count, 0) + COALESCE(wrrb_flex_count, 0) + COALESCE(k_count, 0) + ` +
+              `COALESCE(def_count, 0) + COALESCE(dl_count, 0) + COALESCE(lb_count, 0) + ` +
+              `COALESCE(db_count, 0) + COALESCE(idp_flex_count, 0) ${operator} $${values.length}`
+          );
         } else {
           const column = SLOT_COLUMNS[slotUpper];
           if (column) {
