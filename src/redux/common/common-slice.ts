@@ -57,7 +57,7 @@ const initialState: CommonState = {
     bestBall: undefined,
     draftType: undefined,
     playerType: undefined,
-    rosterSlots: "QB+SF=2",
+    rosterSlots: "QB+SF=2,TE=1,DEF=0,K=0",
     scoring: undefined,
     superflex: undefined,
     teams: 12,

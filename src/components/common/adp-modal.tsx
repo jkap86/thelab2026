@@ -52,7 +52,7 @@ const parseRosterSlots = (str: string | undefined): RosterSlot[] => {
         const [, position, op, countStr] = match;
         // Treat ":" as "=" for backwards compatibility
         const operator = op === ":" ? "=" : op;
-        return { position, operator, count: parseInt(countStr, 10) || 1 };
+        return { position, operator, count: parseInt(countStr, 10) ?? 0 };
       }
       return null;
     })
