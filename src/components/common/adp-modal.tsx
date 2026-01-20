@@ -5,6 +5,7 @@ import { RootState, AppDispatch } from "@/redux/store";
 import { updateAdpFilters, clearAdpCache } from "@/redux/common/common-slice";
 import { fetchADP } from "@/redux/common/common-actions";
 import { ADPFilters } from "@/lib/types/common-types";
+import { getSlotAbbrev } from "@/utils/common/get-slot-abbrev";
 
 const ROSTER_SLOT_OPTIONS = [
   "QB",
@@ -17,6 +18,10 @@ const ROSTER_SLOT_OPTIONS = [
   "WRRB_FLEX",
   "K",
   "DEF",
+  "DL",
+  "LB",
+  "DB",
+  "IDP_FLEX",
   "BN",
   "QB+SF",
 ];
@@ -163,9 +168,13 @@ const AdpModal = ({
   };
 
   const addRosterSlot = () => {
+    const nextSlot = ROSTER_SLOT_OPTIONS.filter((position) => {
+      return !rosterSlots.some((slot) => slot.position === position);
+    })[0];
+
     setRosterSlots((prev) => [
       ...prev,
-      { position: "QB", operator: "=", count: 1 },
+      { position: nextSlot, operator: "=", count: 1 },
     ]);
   };
 
@@ -371,7 +380,7 @@ const AdpModal = ({
                   >
                     {ROSTER_SLOT_OPTIONS.map((opt) => (
                       <option key={opt} value={opt}>
-                        {opt}
+                        {getSlotAbbrev(opt)}
                       </option>
                     ))}
                   </select>

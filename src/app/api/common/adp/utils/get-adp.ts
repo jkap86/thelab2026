@@ -89,13 +89,15 @@ export async function getADP(filters?: ADPFilters): Promise<ADPResponse> {
         if (slotUpper === "QB+SF") {
           values.push(parseInt(countStr, 10));
           leagueConditions.push(
-            `qb_count + super_flex_count ${operator} $${values.length}`
+            `COALESCE(qb_count, 0) + COALESCE(super_flex_count, 0) ${operator} $${values.length}`
           );
         } else {
           const column = SLOT_COLUMNS[slotUpper];
           if (column) {
             values.push(parseInt(countStr, 10));
-            leagueConditions.push(`${column} ${operator} $${values.length}`);
+            leagueConditions.push(
+              `COALESCE(${column}, 0) ${operator} $${values.length}`
+            );
           }
         }
       }
@@ -103,6 +105,7 @@ export async function getADP(filters?: ADPFilters): Promise<ADPResponse> {
   }
 
   // Scoring settings filter (on leagues)
+  // COALESCE treats missing scoring settings as 0
   if (filters?.scoring) {
     const pairs = filters.scoring.split(",").map((p) => p.trim());
     for (const pair of pairs) {
@@ -111,7 +114,7 @@ export async function getADP(filters?: ADPFilters): Promise<ADPResponse> {
         const [, key, operator, value] = match;
         values.push(parseFloat(value));
         leagueConditions.push(
-          `(scoring_settings ->> '${key}')::numeric ${operator} $${values.length}`
+          `COALESCE((scoring_settings ->> '${key}')::numeric, 0) ${operator} $${values.length}`
         );
       }
     }
@@ -119,7 +122,9 @@ export async function getADP(filters?: ADPFilters): Promise<ADPResponse> {
 
   // Superflex filter: QB + SUPER_FLEX combined = 2 (on leagues)
   if (filters?.superflex) {
-    leagueConditions.push(`qb_count + super_flex_count = 2`);
+    leagueConditions.push(
+      `COALESCE(qb_count, 0) + COALESCE(super_flex_count, 0) = 2`
+    );
   }
 
   // Teams filter (on leagues)
