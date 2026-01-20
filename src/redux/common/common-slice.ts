@@ -52,7 +52,7 @@ const initialState: CommonState = {
   adpDraftCounts: {},
   adpFilters: {
     startDate: getDaysAgo(14),
-    endDate: undefined,
+    endDate: getDaysAgo(0),
     leagueType: undefined,
     bestBall: undefined,
     draftType: undefined,

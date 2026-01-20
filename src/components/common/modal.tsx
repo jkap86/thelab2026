@@ -59,8 +59,8 @@ const Modal = ({
     >
       <div
         className={
-          "bg-[var(--color3)] min-w-[80dvmin] w-[20rem] h-[70dvh] max-h-fit rounded-[2rem] overflow-auto " +
-          "shadow-[0_0_1rem_gray,inset_0_0_2rem_black] outline-double outline-[var(--color1)] outline-[.25rem] p-8"
+          "bg-[var(--color3)] max-w-[90dvmin] max-h-[90dvh] min-w-[90dvmin] h-fit rounded-[2rem] overflow-auto " +
+          "shadow-[0_0_1rem_gray,inset_0_0_2rem_black] outline-double outline-[var(--color1)] outline-[.25rem] p-4"
         }
         onMouseDown={(e) => e.stopPropagation()}
       >

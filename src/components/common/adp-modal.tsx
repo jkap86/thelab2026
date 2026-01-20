@@ -42,8 +42,8 @@ const SCORING_OPTIONS = [
 
 const OPERATORS = ["=", ">", "<"] as const;
 
-type RosterSlot = { position: string; operator: string; count: number };
-type ScoringFilter = { key: string; operator: string; value: number };
+type RosterSlot = { position: string; operator: string; count: number | null };
+type ScoringFilter = { key: string; operator: string; value: number | null };
 
 const parseRosterSlots = (str: string | undefined): RosterSlot[] => {
   if (!str) return [];
@@ -58,7 +58,11 @@ const parseRosterSlots = (str: string | undefined): RosterSlot[] => {
         const [, position, op, countStr] = match;
         // Treat ":" as "=" for backwards compatibility
         const operator = op === ":" ? "=" : op;
-        return { position, operator, count: parseInt(countStr, 10) ?? 0 };
+        return {
+          position,
+          operator,
+          count: parseInt(countStr, 10) ?? 0,
+        } as RosterSlot;
       }
       return null;
     })
@@ -67,7 +71,9 @@ const parseRosterSlots = (str: string | undefined): RosterSlot[] => {
 
 const serializeRosterSlots = (slots: RosterSlot[]): string | undefined => {
   if (slots.length === 0) return undefined;
-  return slots.map((s) => `${s.position}${s.operator}${s.count}`).join(",");
+  return slots
+    .map((s) => `${s.position}${s.operator}${s.count ?? 0}`)
+    .join(",");
 };
 
 const parseScoringFilters = (str: string | undefined): ScoringFilter[] => {
@@ -80,7 +86,11 @@ const parseScoringFilters = (str: string | undefined): ScoringFilter[] => {
       const match = pair.match(/^(\w+)(=|>|<)(.+)$/);
       if (match) {
         const [, key, operator, value] = match;
-        return { key, operator, value: parseFloat(value) || 0 };
+        return {
+          key,
+          operator,
+          value: parseFloat(value) || 0,
+        } as ScoringFilter;
       }
       return null;
     })
@@ -91,7 +101,7 @@ const serializeScoringFilters = (
   filters: ScoringFilter[]
 ): string | undefined => {
   if (filters.length === 0) return undefined;
-  return filters.map((f) => `${f.key}${f.operator}${f.value}`).join(",");
+  return filters.map((f) => `${f.key}${f.operator}${f.value ?? 0}`).join(",");
 };
 
 const AdpModal = ({
@@ -179,10 +189,10 @@ const AdpModal = ({
     ]);
   };
 
-  const updateRosterSlot = (
+  const updateRosterSlot = <K extends keyof RosterSlot>(
     index: number,
-    field: keyof RosterSlot,
-    value: string | number
+    field: K,
+    value: RosterSlot[K]
   ) => {
     setRosterSlots((prev) =>
       prev.map((slot, i) => (i === index ? { ...slot, [field]: value } : slot))
@@ -200,10 +210,10 @@ const AdpModal = ({
     ]);
   };
 
-  const updateScoringFilter = (
+  const updateScoringFilter = <K extends keyof ScoringFilter>(
     index: number,
-    field: keyof ScoringFilter,
-    value: string | number
+    field: K,
+    value: ScoringFilter[K]
   ) => {
     setScoringFilters((prev) =>
       prev.map((filter, i) =>
@@ -218,9 +228,9 @@ const AdpModal = ({
 
   return (
     <Modal isOpen={isOpen} onClose={() => setIsOpen(false)}>
-      <div className="flex flex-col gap-4 text-[1.25rem] font-chill">
+      <div className="flex flex-col gap-4 text-[1.75rem] font-chill w-full">
         {/* Modal Header */}
-        <h1 className="text-[2rem] font-score text-center">ADP Filters</h1>
+        <h1 className="text-[1.75rem] font-metal text-center">ADP Filters</h1>
 
         {/* Loading Spinner & Results */}
         <div ref={resultsRef}>
@@ -231,11 +241,13 @@ const AdpModal = ({
           )}
 
           {!isLoading && (redraftCounts || dynastyCounts) && (
-            <div className="mt-4 p-4 rounded bg-[var(--color2)]">
-              <h2 className="font-bold text-lg mb-3">Drafts Found</h2>
+            <div className="mt-4 p-4 rounded bg-[var(--color1)] w-fit m-auto shadow-[0_0_.5rem_black]">
+              <h2 className="font-bold text-[1.75rem] mb-3 text-[var(--color2)] !text-shadow-[0_0_.5rem_white]">
+                Drafts Found
+              </h2>
               <div className="flex justify-center gap-16">
                 {/* Redraft */}
-                <div className="flex flex-col items-center gap-1">
+                <div className="flex flex-col items-center gap-1 bg-[var(--color4)] rounded p-4 shadow-[0_0_.5rem_white]">
                   <span className="font-bold text-[var(--color1)]">
                     Redraft
                   </span>
@@ -260,7 +272,7 @@ const AdpModal = ({
                 </div>
 
                 {/* Dynasty */}
-                <div className="flex flex-col items-center gap-1">
+                <div className="flex flex-col items-center gap-1 bg-[var(--color4)] rounded p-4 shadow-[0_0_.5rem_white]">
                   <span className="font-bold text-[var(--color1)]">
                     Dynasty
                   </span>
@@ -289,35 +301,37 @@ const AdpModal = ({
         </div>
 
         {/* Date Range */}
-        <div className="flex flex-col gap-2 text-center">
+        <div className="flex flex-col gap-2 text-center shadow-[0_0_.5rem_black] rounded p-4 bg-[var(--color8)] max-w-full w-fit m-auto">
           <label className="font-bold">Date Range</label>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center justify-center">
             <input
               type="date"
-              className="flex-1 p-2 rounded bg-[var(--color2)] text-white"
+              className="p-2 rounded bg-[var(--color2)] text-white w-[15rem] text-center shadow-[0_0_.5rem_white] cursor-pointer"
               value={localFilters.startDate || ""}
               onChange={(e) =>
                 updateFilter("startDate", e.target.value || undefined)
               }
+              onClick={(e) => (e.target as HTMLInputElement).showPicker()}
             />
-            <span>to</span>
+            <span className="font-bold">to</span>
             <input
               type="date"
-              className="flex-1 p-2 rounded bg-[var(--color2)] text-white"
+              className="p-2 rounded bg-[var(--color2)] text-white w-[15rem] text-center shadow-[0_0_.5rem_white] cursor-pointer"
               value={localFilters.endDate || ""}
               onChange={(e) =>
                 updateFilter("endDate", e.target.value || undefined)
               }
+              onClick={(e) => (e.target as HTMLInputElement).showPicker()}
             />
           </div>
         </div>
 
         <div className="flex justify-evenly text-center">
           {/* Format (Best Ball vs Lineup) */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 shadow-[0_0_.5rem_black] rounded p-4 bg-[var(--color8)]">
             <label className="font-bold">Format</label>
             <select
-              className="p-2 rounded bg-[var(--color2)] text-white"
+              className="p-2 rounded bg-[var(--color2)] text-white shadow-[0_0_.5rem_white]"
               value={localFilters.bestBall || ""}
               onChange={(e) =>
                 updateFilter("bestBall", e.target.value || undefined)
@@ -330,10 +344,10 @@ const AdpModal = ({
           </div>
 
           {/* Player Type */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 shadow-[0_0_.5rem_black] rounded p-4 bg-[var(--color8)]">
             <label className="font-bold">Player Type</label>
             <select
-              className="p-2 rounded bg-[var(--color2)] text-white"
+              className="p-2 rounded bg-[var(--color2)] text-white shadow-[0_0_.5rem_white]"
               value={localFilters.playerType || ""}
               onChange={(e) =>
                 updateFilter("playerType", e.target.value || undefined)
@@ -347,11 +361,11 @@ const AdpModal = ({
           </div>
 
           {/* Teams */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 bg-[var(--color8)] rounded p-4 shadow-[0_0_.5rem_black]">
             <label className="font-bold">Teams</label>
             <input
               type="number"
-              className="p-2 rounded bg-[var(--color2)] text-white"
+              className="p-2 rounded bg-[var(--color2)] text-white w-[5rem] text-center shadow-[0_0_.5rem_white]"
               placeholder="Any"
               min={4}
               max={32}
@@ -376,7 +390,7 @@ const AdpModal = ({
               {rosterSlots.map((slot, index) => (
                 <div
                   key={index}
-                  className="flex items-center bg-[var(--color8)] p-2 rounded"
+                  className="flex items-center bg-[var(--color8)] p-2 rounded shadow-[0_0_.5rem_black]"
                 >
                   <select
                     className="flex-1 p-2 rounded bg-[var(--color2)] text-white"
@@ -409,12 +423,14 @@ const AdpModal = ({
                     className="w-16 p-2 rounded bg-[var(--color2)] text-white text-center"
                     min={0}
                     max={50}
-                    value={slot.count}
+                    value={slot.count ?? ""}
                     onChange={(e) =>
                       updateRosterSlot(
                         index,
                         "count",
-                        parseInt(e.target.value, 10) || 0
+                        e.target.value === ""
+                          ? null
+                          : parseInt(e.target.value, 10)
                       )
                     }
                   />
@@ -430,7 +446,7 @@ const AdpModal = ({
 
               <button
                 type="button"
-                className="w-8 h-8 flex items-center justify-center rounded bg-[var(--color1)] text-white text-xl hover:opacity-80"
+                className="w-[3rem] h-[3rem] flex items-center justify-center rounded-full bg-[var(--color1)] text-white font-score text-[3rem] hover:opacity-80 shadow-[0_0_.5rem_black]"
                 onClick={addRosterSlot}
               >
                 +
@@ -447,7 +463,7 @@ const AdpModal = ({
               {scoringFilters.map((filter, index) => (
                 <div
                   key={index}
-                  className="flex items-center bg-[var(--color8)] p-2 rounded"
+                  className="flex items-center bg-[var(--color8)] p-2 rounded shadow-[0_0_.5rem_black]"
                 >
                   <select
                     className="flex-1 p-2 rounded bg-[var(--color2)] text-white"
@@ -479,12 +495,14 @@ const AdpModal = ({
                     type="number"
                     className="w-20 p-2 rounded bg-[var(--color2)] text-white text-center"
                     step="0.1"
-                    value={filter.value}
+                    value={filter.value ?? ""}
                     onChange={(e) =>
                       updateScoringFilter(
                         index,
                         "value",
-                        parseFloat(e.target.value) || 0
+                        e.target.value === ""
+                          ? null
+                          : parseFloat(e.target.value)
                       )
                     }
                   />
@@ -500,7 +518,7 @@ const AdpModal = ({
 
               <button
                 type="button"
-                className="w-8 h-8 flex items-center justify-center rounded bg-[var(--color1)] text-white text-xl hover:opacity-80"
+                className="w-[3rem] h-[3rem] flex items-center justify-center rounded-full bg-[var(--color1)] text-white font-score text-[3rem] hover:opacity-80 shadow-[0_0_.5rem_black]"
                 onClick={addScoringFilter}
               >
                 +
