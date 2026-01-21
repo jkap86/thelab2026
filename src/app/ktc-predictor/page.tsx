@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
-  ScatterChart,
+  ComposedChart,
   Scatter,
   LineChart,
   Line,
@@ -75,24 +76,6 @@ interface UpcomingPredictionResponse {
   predictions: UpcomingPrediction[];
 }
 
-interface ScatterDataPoint {
-  x: number;
-  y: number;
-  year: number;
-}
-
-function HistoricalTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ScatterDataPoint }> }) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="bg-gray-800 p-3 rounded border border-gray-600 text-sm">
-      <p className="text-gray-300">Year: {d.year}</p>
-      <p className="text-gray-300">FP/Game: {d.x.toFixed(1)}</p>
-      <p className="text-gray-300">KTC Value: {d.y.toLocaleString()}</p>
-    </div>
-  );
-}
-
 function ConfidenceBadge({ score, factors }: { score: number; factors?: ConfidenceFactors }) {
   // Color based on score: green (65+), yellow (40-64), red (<40)
   const getColor = (s: number) => {
@@ -138,12 +121,75 @@ function ConfidenceBadge({ score, factors }: { score: number; factors?: Confiden
 
 export default function KtcPredictorPage() {
   const data = chartData as ChartDataOutput;
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string>('');
-  const [projectedGames, setProjectedGames] = useState<number>(17);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // Read from URL params
+  const selectedPlayerId = searchParams.get('player') || '';
+  const projectedGames = parseInt(searchParams.get('games') || '17', 10) || 17;
+
   const [upcomingPredictions, setUpcomingPredictions] = useState<UpcomingPredictionResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [inputText, setInputText] = useState('');
 
   const selectedPlayer = data.players.find(p => p.playerId === selectedPlayerId);
+
+  // Sync input text with selected player
+  useEffect(() => {
+    if (selectedPlayer) {
+      setInputText(`${selectedPlayer.name} (${selectedPlayer.position})`);
+    } else {
+      setInputText('');
+    }
+  }, [selectedPlayer]);
+
+  // Initialize games param if not present
+  useEffect(() => {
+    if (!searchParams.has('games')) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('games', '17');
+      router.replace(`?${params.toString()}`, { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  // Update URL params
+  const setSelectedPlayerId = useCallback((playerId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (playerId) {
+      params.set('player', playerId);
+    } else {
+      params.delete('player');
+    }
+    if (!params.has('games')) {
+      params.set('games', '17');
+    }
+    router.push(`?${params.toString()}`, { scroll: false });
+  }, [searchParams, router]);
+
+  const setProjectedGames = useCallback((games: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('games', games.toString());
+    router.push(`?${params.toString()}`, { scroll: false });
+  }, [searchParams, router]);
+
+  // Handle player selection from datalist
+  const handlePlayerInput = useCallback((inputValue: string) => {
+    setInputText(inputValue);
+    const player = data.players.find(
+      p => `${p.name} (${p.position})` === inputValue
+    );
+    if (player) {
+      setSelectedPlayerId(player.playerId);
+    } else if (inputValue === '') {
+      setSelectedPlayerId('');
+    }
+  }, [data.players, setSelectedPlayerId]);
+
+  // Clear player selection
+  const clearPlayer = useCallback(() => {
+    setInputText('');
+    setSelectedPlayerId('');
+  }, [setSelectedPlayerId]);
 
   // Fetch upcoming predictions when player or games changes
   useEffect(() => {
@@ -162,53 +208,51 @@ export default function KtcPredictorPage() {
       .catch(() => setLoading(false));
   }, [selectedPlayerId, projectedGames]);
 
-  // Prepare historical chart data (using FP per game)
-  const actualData: ScatterDataPoint[] = selectedPlayer?.seasons.map(s => ({
-    x: s.gamesPlayed > 0 ? s.fantasyPoints / s.gamesPlayed : 0,
-    y: s.actualEndKtc,
-    year: s.year,
-  })) || [];
-
-  const predictedData: ScatterDataPoint[] = selectedPlayer?.seasons.map(s => ({
-    x: s.gamesPlayed > 0 ? s.fantasyPoints / s.gamesPlayed : 0,
-    y: s.predictedEndKtc,
-    year: s.year,
-  })) || [];
+  // Prepare historical chart data - vectors from actual to predicted
+  const vectorData = selectedPlayer?.seasons.map(s => {
+    const fpPerGame = s.gamesPlayed > 0 ? s.fantasyPoints / s.gamesPlayed : 0;
+    return {
+      x: fpPerGame,
+      actual: s.actualEndKtc,
+      predicted: s.predictedEndKtc,
+      year: s.year,
+    };
+  }) || [];
 
   // Position-specific max FP/game for chart scaling (matches API)
-  const positionMaxFpPerGame: Record<string, number> = {
-    QB: 35,
-    RB: 30,
-    WR: 30,
-    TE: 25,
-  };
-  const maxFpPerGame = selectedPlayer ? positionMaxFpPerGame[selectedPlayer.position] || 30 : 30;
+  const maxFpPerGame = 25;
 
   return (
     <main className="min-h-screen w-full p-8 bg-gray-900 text-white">
       <h1 className="text-3xl font-bold mb-4 text-center">KTC Prediction Model</h1>
       <p className="text-center mb-6 text-gray-400">
-        Random Forest Model | R² = 0.907 | {data.metadata.totalPlayers} players
+        XGBoost Model (39 features) | R² = 0.944 | MAE = 169 pts | {data.metadata.totalPlayers} players
       </p>
 
       {/* Player Selector */}
-      <div className="max-w-md mx-auto mb-8">
-        <label htmlFor="player-select" className="block text-sm font-medium text-gray-400 mb-2">
-          Select a Player
-        </label>
-        <select
-          id="player-select"
-          value={selectedPlayerId}
-          onChange={e => setSelectedPlayerId(e.target.value)}
-          className="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-        >
-          <option value="">-- Select a player --</option>
+      <div className="max-w-md mx-auto mb-8 relative">
+        <input
+          type="text"
+          list="player-list"
+          value={inputText}
+          onChange={e => handlePlayerInput(e.target.value)}
+          placeholder="Search for a player..."
+          className="w-full p-3 pr-10 bg-gray-800 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+        />
+        {inputText && (
+          <button
+            onClick={clearPlayer}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+            type="button"
+          >
+            ✕
+          </button>
+        )}
+        <datalist id="player-list">
           {data.players.map(player => (
-            <option key={player.playerId} value={player.playerId}>
-              {player.name} ({player.position})
-            </option>
+            <option key={player.playerId} value={`${player.name} (${player.position})`} />
           ))}
-        </select>
+        </datalist>
       </div>
 
       {selectedPlayer && (
@@ -225,6 +269,51 @@ export default function KtcPredictorPage() {
             />
           </div>
 
+          {/* Season History Table */}
+          <div className="mb-8 bg-gray-800 rounded-lg p-4">
+            <h3 className="text-xl font-semibold mb-4">Season History</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-gray-400 border-b border-gray-700">
+                    <th className="py-4 px-6 text-center">Year</th>
+                    <th className="py-4 px-6 text-center">Games</th>
+                    <th className="py-4 px-6 text-center">FP/Game</th>
+                    <th className="py-4 px-6 text-center">Start KTC</th>
+                    <th className="py-4 px-6 text-center">Actual End KTC</th>
+                    <th className="py-4 px-6 text-center">Predicted End KTC</th>
+                    <th className="py-4 px-6 text-center">Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedPlayer.seasons.map(season => {
+                    const error = season.predictedEndKtc - season.actualEndKtc;
+                    const fpPerGame = season.gamesPlayed > 0 ? season.fantasyPoints / season.gamesPlayed : 0;
+                    return (
+                      <tr key={season.year} className="border-b border-gray-700">
+                        <td className="py-4 px-6 text-center">{season.year}</td>
+                        <td className="py-4 px-6 text-center">{season.gamesPlayed}</td>
+                        <td className="py-4 px-6 text-center">{fpPerGame.toFixed(1)}</td>
+                        <td className="py-4 px-6 text-center text-gray-300">
+                          {season.startKtc.toLocaleString()}
+                        </td>
+                        <td className="py-4 px-6 text-center text-purple-400">
+                          {season.actualEndKtc.toLocaleString()}
+                        </td>
+                        <td className="py-4 px-6 text-center text-green-400">
+                          {season.predictedEndKtc.toLocaleString()}
+                        </td>
+                        <td className={`py-4 px-6 text-center ${error > 0 ? 'text-red-400' : 'text-blue-400'}`}>
+                          {error > 0 ? '+' : ''}{error.toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* Charts Container */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Chart 1: Historical */}
@@ -235,7 +324,7 @@ export default function KtcPredictorPage() {
               </p>
               <div className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ScatterChart margin={{ top: 20, right: 20, bottom: 40, left: 40 }}>
+                  <ComposedChart data={vectorData} margin={{ top: 20, right: 20, bottom: 40, left: 40 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis
                       type="number"
@@ -254,8 +343,6 @@ export default function KtcPredictorPage() {
                     />
                     <YAxis
                       type="number"
-                      dataKey="y"
-                      name="End KTC"
                       domain={[0, 9999]}
                       allowDataOverflow={true}
                       tick={{ fill: '#9CA3AF' }}
@@ -268,23 +355,52 @@ export default function KtcPredictorPage() {
                         fill: '#9CA3AF',
                       }}
                     />
-                    <Tooltip content={<HistoricalTooltip />} />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null;
+                        const d = payload[0].payload;
+                        const error = d.predicted - d.actual;
+                        return (
+                          <div className="bg-gray-800 p-3 rounded border border-gray-600 text-sm">
+                            <p className="text-gray-300 font-semibold">{d.year}</p>
+                            <p className="text-gray-300">FP/Game: {d.x.toFixed(1)}</p>
+                            <p className="text-purple-400">Actual: {d.actual.toLocaleString()}</p>
+                            <p className="text-green-400">Predicted: {d.predicted.toLocaleString()}</p>
+                            <p className={error > 0 ? 'text-red-400' : 'text-blue-400'}>
+                              Error: {error > 0 ? '+' : ''}{error.toLocaleString()}
+                            </p>
+                          </div>
+                        );
+                      }}
+                    />
                     <Legend />
                     <Scatter
                       name="Actual End KTC"
-                      data={actualData}
+                      dataKey="actual"
                       fill="#8B5CF6"
                     />
                     <Scatter
                       name="Predicted End KTC"
-                      data={predictedData}
+                      dataKey="predicted"
                       fill="#10B981"
                     />
-                  </ScatterChart>
+                    {/* Draw vectors from actual to predicted */}
+                    {vectorData.map((d, i) => (
+                      <ReferenceLine
+                        key={i}
+                        segment={[
+                          { x: d.x, y: d.actual },
+                          { x: d.x, y: d.predicted }
+                        ]}
+                        stroke={d.predicted > d.actual ? '#10B981' : '#EF4444'}
+                        strokeWidth={2}
+                      />
+                    ))}
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
               <div className="mt-4 text-center text-gray-500 text-xs">
-                <p>Purple: Actual | Green: Model Predicted</p>
+                <p>Purple dot: Actual | Green dot: Predicted | Line: Error (green=over, red=under)</p>
               </div>
             </div>
 
@@ -425,50 +541,6 @@ export default function KtcPredictorPage() {
             </div>
           </div>
 
-          {/* Historical Data Table */}
-          <div className="mt-8 bg-gray-800 rounded-lg p-4">
-            <h3 className="text-xl font-semibold mb-4">Season History</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-gray-400 border-b border-gray-700">
-                    <th className="py-2 px-4 text-left">Year</th>
-                    <th className="py-2 px-4 text-right">Games</th>
-                    <th className="py-2 px-4 text-right">FP/Game</th>
-                    <th className="py-2 px-4 text-right">Start KTC</th>
-                    <th className="py-2 px-4 text-right">Actual End KTC</th>
-                    <th className="py-2 px-4 text-right">Predicted End KTC</th>
-                    <th className="py-2 px-4 text-right">Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedPlayer.seasons.map(season => {
-                    const error = season.predictedEndKtc - season.actualEndKtc;
-                    const fpPerGame = season.gamesPlayed > 0 ? season.fantasyPoints / season.gamesPlayed : 0;
-                    return (
-                      <tr key={season.year} className="border-b border-gray-700">
-                        <td className="py-2 px-4">{season.year}</td>
-                        <td className="py-2 px-4 text-right">{season.gamesPlayed}</td>
-                        <td className="py-2 px-4 text-right">{fpPerGame.toFixed(1)}</td>
-                        <td className="py-2 px-4 text-right text-gray-300">
-                          {season.startKtc.toLocaleString()}
-                        </td>
-                        <td className="py-2 px-4 text-right text-purple-400">
-                          {season.actualEndKtc.toLocaleString()}
-                        </td>
-                        <td className="py-2 px-4 text-right text-green-400">
-                          {season.predictedEndKtc.toLocaleString()}
-                        </td>
-                        <td className={`py-2 px-4 text-right ${error > 0 ? 'text-red-400' : 'text-blue-400'}`}>
-                          {error > 0 ? '+' : ''}{error.toLocaleString()}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </>
       )}
 

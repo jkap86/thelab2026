@@ -2,10 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Load chart data to get player info
+// Load chart data and XGBoost projection model
 const chartDataPath = path.resolve(process.cwd(), 'src/app/ktc-predictor/chart-data.json');
+const projectionModelPath = path.resolve(process.cwd(), 'src/app/ktc-predictor/xgboost-projection-model.json');
 
 const GAMES_PER_SEASON = 17;
+const KTC_MAX_VALUE = 9999;
+
+// Position-specific FP thresholds for normalization
+const FP_THRESHOLDS: Record<string, { elite: number; average: number; min: number }> = {
+  QB: { elite: 350, average: 250, min: 150 },
+  RB: { elite: 250, average: 150, min: 80 },
+  WR: { elite: 250, average: 150, min: 80 },
+  TE: { elite: 200, average: 120, min: 60 },
+};
+
+// Position-specific age curves
+const AGE_CURVES: Record<string, { peakStart: number; peakEnd: number; careerEnd: number }> = {
+  QB: { peakStart: 28, peakEnd: 34, careerEnd: 42 },
+  RB: { peakStart: 23, peakEnd: 27, careerEnd: 32 },
+  WR: { peakStart: 25, peakEnd: 29, careerEnd: 35 },
+  TE: { peakStart: 26, peakEnd: 30, careerEnd: 36 },
+};
+
+// Position-specific cliff ages
+const AGE_CLIFFS: Record<string, number> = {
+  QB: 35,
+  RB: 27,
+  WR: 30,
+  TE: 31,
+};
 
 interface SeasonData {
   year: number;
@@ -24,6 +50,7 @@ interface PlayerChartData {
   latestKtc: number;
   ktc30dTrend: number;
   ktc90dTrend: number;
+  historicalSnapPct: number;
   confidenceScore: number;
   confidenceFactors: {
     dataAvailability: number;
@@ -43,112 +70,248 @@ interface ChartDataOutput {
   };
 }
 
-/**
- * Calculate how much weight to give performance vs maintaining baseline value
- * For short seasons, performance is unreliable - we should mostly preserve value
- *
- * Returns a value 0-1 where:
- * - 0 = ignore performance entirely, keep baseline value
- * - 1 = use full performance-based calculation
- */
-function getPerformanceWeight(gamesPlayed: number): number {
-  if (gamesPlayed <= 1) return 0.05;  // 1 game: 5% performance, 95% baseline
-  if (gamesPlayed <= 2) return 0.15;  // 2 games: 15% performance
-  if (gamesPlayed <= 4) return 0.30;  // 3-4 games: 30% performance
-  if (gamesPlayed <= 8) return 0.60;  // 5-8 games: 60% performance
-  if (gamesPlayed <= 12) return 0.85; // 9-12 games: 85% performance
-  return 1.0;                          // 13+ games: full performance weight
+// XGBoost tree structure
+interface XGBoostTree {
+  left_children: number[];
+  right_children: number[];
+  split_indices: number[];
+  split_conditions: number[];
+  base_weights: number[];
+  default_left: number[];
 }
 
-/**
- * Calculate games played adjustment factor for full seasons
- * Only applies to games 5+, short seasons handled by performance weight blending
- */
-function getGamesAdjustment(gamesPlayed: number, historicalAvgGames: number): number {
-  // For short seasons, adjustment is handled by performance weight blending
-  if (gamesPlayed <= 4) return 1.0;
+interface XGBoostModel {
+  metadata: {
+    model_type: string;
+    n_trees: number;
+    r2_score: number;
+    mae: number;
+    mae_ktc: number;
+    n_features: number;
+    feature_names: string[];
+  };
+  xgboost_model: {
+    learner: {
+      gradient_booster: {
+        model: {
+          trees: XGBoostTree[];
+        };
+      };
+      learner_model_param: {
+        base_score: string;
+      };
+    };
+  };
+}
 
-  const gamesFactor = Math.min(gamesPlayed / GAMES_PER_SEASON, 1);
-  const historicalFactor = Math.min(historicalAvgGames / GAMES_PER_SEASON, 1);
+// Feature extraction functions
+function normalizeKtc(ktc: number): number {
+  return Math.min(Math.max(ktc / KTC_MAX_VALUE, 0), 1);
+}
 
-  if (gamesFactor < historicalFactor) {
-    // Penalty: up to 15% reduction for significantly fewer games
-    return 0.85 + (gamesFactor / historicalFactor) * 0.15;
+function getAgeFactor(age: number, position: string): number {
+  const curve = AGE_CURVES[position] || AGE_CURVES.WR;
+
+  if (age >= curve.peakStart && age <= curve.peakEnd) {
+    return 1.0;
+  } else if (age < curve.peakStart) {
+    const minAge = 21;
+    const range = curve.peakStart - minAge;
+    const progress = (age - minAge) / range;
+    return 0.5 + (progress * 0.5);
   } else {
-    // Bonus: up to 10% increase for more games than average
-    const bonus = Math.min((gamesFactor - historicalFactor) * 0.5, 0.1);
-    return 1.0 + bonus;
+    const range = curve.careerEnd - curve.peakEnd;
+    const decline = (age - curve.peakEnd) / range;
+    return Math.max(1.0 - (decline * decline), 0);
   }
 }
 
-/**
- * Prediction function that scales from the most recent season
- * Uses latest season as baseline and scales proportionally by FP/game ratio
- * This ensures monotonic behavior (higher FP always = higher predicted KTC)
- */
+function getCliffYearsPenalty(age: number, position: string): number {
+  const cliff = AGE_CLIFFS[position] || AGE_CLIFFS.WR;
+  if (age < cliff) return 0;
+  const yearsOver = age - cliff;
+  return Math.min((yearsOver / 2) ** 2, 1);
+}
+
+function normalizeYearsExp(yearsExp: number): number {
+  return Math.min(yearsExp / 10, 1);
+}
+
+function normalizeFP(fp: number, position: string): number {
+  const thresholds = FP_THRESHOLDS[position] || FP_THRESHOLDS.WR;
+
+  if (fp >= thresholds.elite) {
+    return Math.min(1.0 + ((fp - thresholds.elite) / thresholds.elite) * 0.2, 1.2);
+  } else if (fp >= thresholds.average) {
+    const range = thresholds.elite - thresholds.average;
+    return 0.5 + ((fp - thresholds.average) / range) * 0.5;
+  } else if (fp >= thresholds.min) {
+    const range = thresholds.average - thresholds.min;
+    return ((fp - thresholds.min) / range) * 0.5;
+  } else {
+    return Math.max(fp / thresholds.min * 0.25, 0);
+  }
+}
+
+function encodePosition(position: string): { is_qb: number; is_rb: number; is_wr: number; is_te: number } {
+  return {
+    is_qb: position === 'QB' ? 1 : 0,
+    is_rb: position === 'RB' ? 1 : 0,
+    is_wr: position === 'WR' ? 1 : 0,
+    is_te: position === 'TE' ? 1 : 0,
+  };
+}
+
+// Extract features for projection model (19 features with breakout detection)
+function extractProjectionFeatures(
+  startKtc: number,
+  age: number,
+  yearsExp: number,
+  position: string,
+  historicalSnapPct: number,
+  baselineFP: number, // Historical average FP
+  projectedFP: number,
+  projectedGames: number,
+  ktc30dTrend: number,  // NEW: 30-day KTC trend
+  ktc90dTrend: number,  // NEW: 90-day KTC trend
+  draftRoundValue: number,  // NEW: Draft round value (0.5 default)
+  draftPickValue: number    // NEW: Draft pick value (0.5 default)
+): number[] {
+  const positionEncoding = encodePosition(position);
+  const projectedFpNormalized = normalizeFP(projectedFP, position);
+  const baselineFpNormalized = normalizeFP(baselineFP, position);
+
+  // Calculate fp_improvement: how much better than baseline (capped -0.5 to 1.0)
+  const rawImprovement = projectedFpNormalized - baselineFpNormalized;
+  const fpImprovement = Math.max(-0.5, Math.min(rawImprovement, 1.0));
+
+  // Breakout potential: high projected FP + low snap % = high breakout potential
+  const breakoutPotential = projectedFpNormalized * (1 - historicalSnapPct);
+
+  // Is backup: binary flag for low snap %
+  const isBackup = historicalSnapPct < 0.65 ? 1 : 0;
+
+  // Features in the same order as PROJECTION_FEATURE_NAMES (19 features):
+  // start_ktc, age_factor, years_exp_normalized, historical_snap_pct, cliff_years_penalty,
+  // ktc_30d_trend, ktc_90d_trend, draft_round_value, draft_pick_value,
+  // is_qb, is_rb, is_wr, is_te, projected_fp_normalized, projected_games_factor,
+  // baseline_fp_normalized, fp_improvement, breakout_potential, is_backup
+  return [
+    normalizeKtc(startKtc),
+    getAgeFactor(age, position),
+    normalizeYearsExp(yearsExp),
+    historicalSnapPct,
+    getCliffYearsPenalty(age, position),
+    ktc30dTrend,       // NEW
+    ktc90dTrend,       // NEW
+    draftRoundValue,   // NEW
+    draftPickValue,    // NEW
+    positionEncoding.is_qb,
+    positionEncoding.is_rb,
+    positionEncoding.is_wr,
+    positionEncoding.is_te,
+    projectedFpNormalized,
+    Math.min(projectedGames / GAMES_PER_SEASON, 1),
+    baselineFpNormalized,
+    fpImprovement,
+    breakoutPotential,
+    isBackup,
+  ];
+}
+
+// Predict using a single XGBoost tree
+function predictXGBoostTree(tree: XGBoostTree, features: number[]): number {
+  let nodeIdx = 0;
+
+  // Traverse until we hit a leaf (left_children[nodeIdx] === -1)
+  while (tree.left_children[nodeIdx] !== -1) {
+    const featureIdx = tree.split_indices[nodeIdx];
+    const threshold = tree.split_conditions[nodeIdx];
+    const featureValue = features[featureIdx];
+
+    // Check for missing value (NaN) - use default direction
+    if (Number.isNaN(featureValue)) {
+      nodeIdx = tree.default_left[nodeIdx] === 1
+        ? tree.left_children[nodeIdx]
+        : tree.right_children[nodeIdx];
+    } else if (featureValue < threshold) {
+      nodeIdx = tree.left_children[nodeIdx];
+    } else {
+      nodeIdx = tree.right_children[nodeIdx];
+    }
+  }
+
+  return tree.base_weights[nodeIdx];
+}
+
+// Predict using XGBoost (sum of all trees + base_score)
+function predictXGBoost(model: XGBoostModel, features: number[]): number {
+  // Parse base_score - XGBoost stores it as '[value]' string format
+  const baseScoreStr = model.xgboost_model.learner.learner_model_param.base_score;
+  const cleanedStr = baseScoreStr.replace(/[\[\]]/g, '');
+  const baseScore = parseFloat(cleanedStr);
+
+  const trees = model.xgboost_model.learner.gradient_booster.model.trees;
+
+  let sum = baseScore;
+  for (const tree of trees) {
+    sum += predictXGBoostTree(tree, features);
+  }
+
+  return sum;
+}
+
+// Load model (cached)
+let cachedModel: XGBoostModel | null = null;
+
+function loadProjectionModel(): XGBoostModel {
+  if (!cachedModel) {
+    cachedModel = JSON.parse(fs.readFileSync(projectionModelPath, 'utf-8'));
+  }
+  return cachedModel!;
+}
+
+// Calculate baseline FP from player's historical seasons
+function calculateBaselineFP(player: PlayerChartData): number {
+  if (player.seasons.length === 0) return 0;
+
+  const totalFP = player.seasons.reduce((sum, s) => sum + s.fantasyPoints, 0);
+  const totalGames = player.seasons.reduce((sum, s) => sum + s.gamesPlayed, 0);
+  const avgFpPerGame = totalGames > 0 ? totalFP / totalGames : 0;
+
+  // Return annualized baseline (FP per full season)
+  return avgFpPerGame * GAMES_PER_SEASON;
+}
+
+// Prediction function using the projection model
 function predictKtcForFPAndGames(
   player: PlayerChartData,
+  baselineFP: number,
   projectedFP: number,
   projectedGames: number
 ): number {
-  const seasons = player.seasons;
+  const model = loadProjectionModel();
 
-  if (seasons.length === 0) {
-    return player.latestKtc;
-  }
+  const features = extractProjectionFeatures(
+    player.latestKtc,
+    player.currentAge,
+    player.yearsExp,
+    player.position,
+    player.historicalSnapPct || 0.8,
+    baselineFP,
+    projectedFP,
+    projectedGames,
+    player.ktc30dTrend || 0,  // NEW: KTC momentum
+    player.ktc90dTrend || 0,  // NEW: KTC momentum
+    0.5,  // NEW: Draft round value (default, not available in chart data)
+    0.5   // NEW: Draft pick value (default, not available in chart data)
+  );
 
-  // Get most recent season as baseline
-  const latestSeason = [...seasons].sort((a, b) => b.year - a.year)[0];
+  const predictedNorm = predictXGBoost(model, features);
+  const predictedKtc = Math.round(predictedNorm * KTC_MAX_VALUE);
 
-  const baselineFpPerGame = latestSeason.gamesPlayed > 0
-    ? latestSeason.fantasyPoints / latestSeason.gamesPlayed
-    : 0;
-  const baselineKtc = latestSeason.predictedEndKtc;
-
-  // Calculate projected FP/game
-  const projectedFpPerGame = projectedGames > 0 ? projectedFP / projectedGames : 0;
-
-  // Handle edge case: no baseline FP/game
-  if (baselineFpPerGame <= 0.1) {
-    return player.latestKtc;
-  }
-
-  // Calculate performance ratio
-  const performanceRatio = projectedFpPerGame / baselineFpPerGame;
-
-  // Non-linear scaling that models real market behavior:
-  // - Diminishing returns for gains (sqrt scaling)
-  // - Steeper drops for poor performance (quadratic scaling)
-  let scaledRatio: number;
-
-  if (performanceRatio >= 1) {
-    // Better than baseline: diminishing returns (sqrt)
-    // ratio 1.0 → 1.0, ratio 1.5 → ~1.22, ratio 2.0 → ~1.41
-    const gain = performanceRatio - 1;
-    scaledRatio = 1 + Math.sqrt(gain) * 0.6; // 0.6 dampening on sqrt
-  } else {
-    // Worse than baseline: steeper decline (quadratic)
-    // ratio 0.5 → ~0.56, ratio 0.25 → ~0.19
-    const loss = 1 - performanceRatio;
-    scaledRatio = 1 - (loss * loss + loss) * 0.5; // Quadratic + linear blend
-  }
-
-  // Bounds: 5% to 180% of baseline KTC (tighter than before)
-  const boundedRatio = Math.max(0.05, Math.min(scaledRatio, 1.8));
-
-  // Calculate pure performance-based prediction
-  const performanceBasedKtc = baselineKtc * boundedRatio;
-
-  // Blend performance-based prediction with baseline based on games played
-  // For short seasons, rely more on baseline (injury shouldn't crater value)
-  const performanceWeight = getPerformanceWeight(projectedGames);
-  let predictedKtc = performanceBasedKtc * performanceWeight + baselineKtc * (1 - performanceWeight);
-
-  // Apply games adjustment (only for 5+ games, short seasons already handled by blending)
-  const historicalAvgGames = seasons.reduce((sum, s) => sum + s.gamesPlayed, 0) / seasons.length;
-  const gamesAdj = getGamesAdjustment(projectedGames, historicalAvgGames);
-
-  return Math.round(predictedKtc * gamesAdj);
+  // Cap at 9999
+  return Math.min(predictedKtc, KTC_MAX_VALUE);
 }
 
 export async function GET(req: NextRequest) {
@@ -178,16 +341,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Player not found' }, { status: 404 });
     }
 
-    // Generate predictions for FP/game range based on position
-    // Points every 0.5 FP/game for smooth curve
-    const positionMaxFpPerGame: Record<string, number> = {
-      QB: 35,
-      RB: 30,
-      WR: 30,
-      TE: 25,
-    };
+    // Calculate baseline FP for breakout detection
+    const baselineFP = calculateBaselineFP(player);
 
-    const rangeMax = positionMaxFpPerGame[player.position] || 24;
+    // Generate predictions for FP/game range (0-25 PPG for all positions)
+    const rangeMax = 25;
 
     // Generate points at 0.5 increments from 0 to max
     const fpPerGameRange: number[] = [];
@@ -200,32 +358,31 @@ export async function GET(req: NextRequest) {
       ? Math.round(player.seasons.reduce((sum, s) => sum + s.gamesPlayed, 0) / player.seasons.length)
       : 17;
 
-    // Generate predictions: convert FP/game to total FP for the prediction function
+    // Generate predictions using the projection model
     const predictions = fpPerGameRange.map(fpPerGame => {
       const totalFP = fpPerGame * projectedGames;
       return {
         projectedFPPerGame: fpPerGame,
-        predictedKtc: predictKtcForFPAndGames(player, totalFP, projectedGames),
+        predictedKtc: predictKtcForFPAndGames(player, baselineFP, totalFP, projectedGames),
       };
     });
 
     // Find breakeven point (where predicted KTC = current KTC)
-    // Binary search for the FP/game that produces latestKtc
     let breakevenFPPerGame: number | null = null;
     const targetKtc = player.latestKtc;
 
-    // Search between 0 and max FP/game
+    // Binary search for breakeven
     const maxFpPerGame = fpPerGameRange[fpPerGameRange.length - 1];
     let low = 0;
-    let high = maxFpPerGame * 1.5; // Allow some room above max
+    let high = maxFpPerGame * 1.5;
 
-    for (let i = 0; i < 20; i++) { // 20 iterations for precision
+    for (let i = 0; i < 20; i++) {
       const mid = (low + high) / 2;
       const totalFP = mid * projectedGames;
-      const predictedKtc = predictKtcForFPAndGames(player, totalFP, projectedGames);
+      const predictedKtc = predictKtcForFPAndGames(player, baselineFP, totalFP, projectedGames);
 
       if (Math.abs(predictedKtc - targetKtc) < 10) {
-        breakevenFPPerGame = Math.round(mid * 10) / 10; // Round to 1 decimal
+        breakevenFPPerGame = Math.round(mid * 10) / 10;
         break;
       }
 
@@ -242,7 +399,6 @@ export async function GET(req: NextRequest) {
         projectedFPPerGame: breakevenFPPerGame,
         predictedKtc: targetKtc,
       });
-      // Sort by FP/game
       predictions.sort((a, b) => a.projectedFPPerGame - b.projectedFPPerGame);
     }
 
