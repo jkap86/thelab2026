@@ -1,19 +1,7 @@
 import { ColumnOption } from "@/lib/types/common-types";
 import { getTextColor } from "../common/get-text-color";
 
-export type LeagueColumnKey =
-  | "optimal_starters_ktc_rank"
-  | "optimal_bench_ktc_rank"
-  | "optimal_qb_starters_ktc_rank"
-  | "optimal_qb_bench_ktc_rank"
-  | "optimal_rb_starters_ktc_rank"
-  | "optimal_rb_bench_ktc_rank"
-  | "optimal_wr_starters_ktc_rank"
-  | "optimal_wr_bench_ktc_rank"
-  | "optimal_te_starters_ktc_rank"
-  | "optimal_te_bench_ktc_rank";
-
-export const leaguesColumnOptions: ColumnOption[] = [
+export const leaguesColumnOptions = [
   {
     label: "KTC Starters Rank",
     abbrev: "KTC S Rk",
@@ -25,7 +13,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -39,7 +27,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -53,7 +41,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -67,7 +55,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -81,7 +69,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -95,7 +83,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -109,7 +97,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -123,7 +111,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -137,7 +125,7 @@ export const leaguesColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -151,14 +139,16 @@ export const leaguesColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
-];
+] as const satisfies readonly ColumnOption[];
 
-export type PlayerColumnKey = "num_own" | "ktc_d";
+export const LEAGUE_COLUMN_KEYS = leaguesColumnOptions.map((o) => o.key);
 
-export const playersColumnOptions: ColumnOption[] = [
+export type LeagueColumnKey = (typeof LEAGUE_COLUMN_KEYS)[number];
+
+export const playersColumnOptions = [
   {
     label: "Number of Shares Owned",
     abbrev: "# Own",
@@ -170,7 +160,7 @@ export const playersColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -184,7 +174,7 @@ export const playersColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -198,7 +188,7 @@ export const playersColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -212,7 +202,7 @@ export const playersColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -226,7 +216,7 @@ export const playersColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -240,7 +230,7 @@ export const playersColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -254,10 +244,73 @@ export const playersColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
+] as const satisfies readonly ColumnOption[];
+
+export const PLAYER_COLUMN_KEYS = playersColumnOptions.map((o) => o.key);
+
+export type PlayerColumnKey = (typeof PLAYER_COLUMN_KEYS)[number];
+
+export type LeaguemateColumnKey = "num_common";
+
+export const leaguemateColumnOptions = [
+  {
+    label: "Number of Common Leagues",
+    abbrev: "# Common",
+    desc: "Number of leagues both are in",
+    key: "num_common",
+    className: "font-metal text-[2.5rem]",
+    style: (
+      value: number,
+      min: number,
+      max: number,
+      avg: number,
+      reverse?: boolean,
+    ) => getTextColor(value, min, max, avg, reverse),
+  },
+  ...leaguesColumnOptions.flatMap((option) => [
+    {
+      ...option,
+      abbrev: "Avg " + option.abbrev,
+      label: "Average " + option.label,
+      desc: "Average " + option.desc,
+      key: "avg_" + option.key,
+    },
+    {
+      ...option,
+      abbrev: "Lm Avg " + option.abbrev,
+      label: "Leaguemate Average " + option.label,
+      desc: "Leaguemate Average " + option.desc,
+      key: "lm_avg_" + option.key,
+    },
+    {
+      ...option,
+      abbrev: "Avg " + option.abbrev + " \u0394",
+      label: "Average " + option.label + " Delta",
+      desc: "Average difference in " + option.desc,
+      key: "avg_delta_" + option.key,
+    },
+  ]),
 ];
+
+export const leaguemateLeaguesColumnOptions = [
+  ...leaguesColumnOptions,
+  ...leaguesColumnOptions.map((option) => ({
+    ...option,
+    label: "Leaguemate " + option.label,
+    abbrev: "Lm " + option.abbrev,
+    desc: "Leaguemate " + option.desc,
+    key: "lm_" + option.key,
+  })),
+] as const satisfies readonly ColumnOption[];
+
+export const LEAGUEMATE_LEAGUES_COLUMN_KEYS =
+  leaguemateLeaguesColumnOptions.map((o) => o.key);
+
+export type LeaguemateLeaguesColumnKey =
+  (typeof LEAGUEMATE_LEAGUES_COLUMN_KEYS)[number];
 
 export type TeamsColumnKey =
   | "optimal_starters_ktc_total"
@@ -275,7 +328,7 @@ export const teamsColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
@@ -289,7 +342,7 @@ export const teamsColumnOptions: ColumnOption[] = [
       min: number,
       max: number,
       avg: number,
-      reverse?: boolean
+      reverse?: boolean,
     ) => getTextColor(value, min, max, avg, reverse),
   },
 ];

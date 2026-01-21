@@ -47,7 +47,7 @@ const HeaderModal = ({
         }}
       >
         <>
-          <div className="text-center text-[1.5rem] font-black font-score">
+          <div className="text-center text-[1.5rem] font-black font-score mb-4">
             Columns
           </div>
           <div className="flex justify-evenly items-center text-[1.5rem] font-chill ">
@@ -65,7 +65,7 @@ const HeaderModal = ({
             ))}
           </div>
 
-          <div className="max-h-[50%] w-[50%] text-[1.25rem] mx-auto my-[2rem] overflow-auto rounded font-chill ">
+          <div className="max-h-[50dvh] w-[50%] text-[1.25rem] mx-auto my-[2rem] overflow-auto rounded font-chill ">
             <ul>
               {options.map((option) => (
                 <li

@@ -1,33 +1,31 @@
-"use client";
-
-import { use, useEffect, useState } from "react";
-import ManagerLayout from "../manager-layout";
-import { useDispatch, useSelector } from "react-redux";
-import { AppDispatch, RootState } from "@/redux/store";
-import TableMain from "@/components/common/table-main";
-import { filterLeagueIds } from "@/utils/common/filter-leagues";
-import Avatar from "@/components/common/avatar";
 import { Header, Row } from "@/lib/types/common-types";
-import HeaderModal from "@/components/common/header-modal";
-import { setLeaguesTabState } from "@/redux/manager/manager-slice";
-import League from "@/components/manager/league";
+import TableMain from "../common/table-main";
+import { useSelector, useDispatch } from "react-redux";
+import { RootState, AppDispatch } from "@/redux/store";
+import { useState, useEffect } from "react";
+import { setLeaguemateLeaguesTabState } from "@/redux/manager/manager-slice";
+import { filterLeagueIds } from "@/utils/common/filter-leagues";
+import Avatar from "../common/avatar";
 import {
-  leaguesColumnOptions,
   LeagueColumnKey,
+  leaguemateLeaguesColumnOptions,
 } from "@/utils/manager/column-options";
 
-export default function LeaguesPage({
-  params,
+const LeaguemateLeagues = ({
+  type,
+  league_ids,
+  leaguemate,
 }: {
-  params: Promise<{ searched: string }>;
-}) {
+  type: number;
+  league_ids: string[];
+  leaguemate: { user_id: string; avatar: string | null; username: string };
+}) => {
   const dispatch: AppDispatch = useDispatch();
-  const { searched } = use(params);
   const { leagues, type1, type2 } = useSelector(
     (state: RootState) => state.manager,
   );
   const { column1, column2, column3, column4, sortBy } = useSelector(
-    (state: RootState) => state.manager.tabs.leagues,
+    (state: RootState) => state.manager.tabs.leaguemateLeagues,
   );
   const [isOpen, setIsOpen] = useState(false);
   const [activeColIndex, setActiveColIndex] = useState<number | null>(null);
@@ -53,9 +51,7 @@ export default function LeaguesPage({
     ...[column1, column2, column3, column4].map((col, index) => ({
       text: (
         <div
-          onClick={() => {
-            setActiveColIndex(index);
-          }}
+          onClick={() => setActiveColIndex(index)}
           className={
             "cursor-pointer h-full w-full outline-[var(--color3)] outline-[.25rem]  outline-double flex items-center justify-center "
           }
@@ -68,7 +64,7 @@ export default function LeaguesPage({
     })),
   ];
 
-  const data: Row[] = filterLeagueIds(Object.keys(leagues || {}), {
+  const data: Row[] = filterLeagueIds(league_ids, {
     type1,
     type2,
     leagues,
@@ -79,14 +75,14 @@ export default function LeaguesPage({
       (roster) => roster.roster_id === league.user_roster_id,
     );
 
+    const lmRoster = league.rosters.find(
+      (roster) => roster.user_id === leaguemate.user_id,
+    );
+
+    console.log({ leaguemateLeaguesColumnOptions });
+
     return {
       id: leagueId,
-      search: {
-        text: league.name,
-        display: (
-          <Avatar avatar_id={league.avatar} type="league" name={league.name} />
-        ),
-      },
       columns: [
         {
           text: (
@@ -103,14 +99,22 @@ export default function LeaguesPage({
             sortBy?.direction === "desc" ? league.name : -(league.index ?? 0),
         },
         ...[column1, column2, column3, column4].map((col) => {
-          const o = leaguesColumnOptions.find(
+          const o = leaguemateLeaguesColumnOptions.find(
             (option) => option.abbrev === col,
           );
 
-          const value = userRoster?.[o?.key as LeagueColumnKey];
+          const key = o?.key?.replace("lm_", "");
+
+          if (!o) console.log({ o, key, col });
+
+          const value = key
+            ? col.startsWith("Lm")
+              ? lmRoster?.[key as LeagueColumnKey]
+              : userRoster?.[key as LeagueColumnKey]
+            : undefined;
 
           return {
-            text: <div>{value}</div>,
+            text: <div>{value ?? "-"}</div>,
             colspan: 1,
             className: "text-center " + o?.className,
             style:
@@ -125,49 +129,30 @@ export default function LeaguesPage({
                   true,
                 )) ||
               {},
-            sort: value,
+            sort: value ?? 0,
           };
         }),
       ],
-      detail: <League type={2} league={league} />,
     };
   });
 
-  const columns: { [key: string]: string } = {
-    column1,
-    column2,
-    column3,
-    column4,
-  };
-
   return (
-    <ManagerLayout searched={searched}>
-      <HeaderModal
-        options={[...leaguesColumnOptions]}
-        columns={Object.keys(columns).map((key) => ({
-          key,
-          value: columns[key],
-          setText: (text: string) => {
-            return dispatch(setLeaguesTabState({ key, value: text }));
-          },
-        }))}
-        isOpen={isOpen}
-        setIsOpen={setIsOpen}
-        activeColIndex={activeColIndex}
-      />
-      <TableMain
-        type={1}
-        headers={headers}
-        data={data}
-        itemsPerPage={25}
-        sortBy={sortBy}
-        setSortBy={(column, direction) =>
-          dispatch(
-            setLeaguesTabState({ key: "sortBy", value: { column, direction } }),
-          )
-        }
-        placeholder="League"
-      />
-    </ManagerLayout>
+    <TableMain
+      type={type}
+      headers={headers}
+      data={data}
+      itemsPerPage={10}
+      sortBy={sortBy}
+      setSortBy={(column, direction) =>
+        dispatch(
+          setLeaguemateLeaguesTabState({
+            key: "sortBy",
+            value: { column, direction },
+          }),
+        )
+      }
+    />
   );
-}
+};
+
+export default LeaguemateLeagues;

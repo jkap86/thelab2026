@@ -66,8 +66,6 @@ export default function PlayersPage({
     }
   }, [isOpen]);
 
-  console.log({ activeColIndex });
-
   const headers: Header[] = [
     {
       text: <div>Player</div>,
@@ -295,7 +293,7 @@ export default function PlayersPage({
             return dispatch(setPlayersTabState({ key, value: text }));
           },
         }))}
-        options={playersColumnOptions}
+        options={[...playersColumnOptions]}
         activeColIndex={activeColIndex}
       />
       <div className="flex justify-center text-[1.5rem] mt-6">

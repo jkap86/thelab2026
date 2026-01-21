@@ -44,6 +44,16 @@ export interface ManagerState {
       teamFilter: string;
       draftClassFilter: string;
     };
+    leaguemates: {
+      column1: string;
+      column2: string;
+      column3: string;
+      column4: string;
+      sortBy: {
+        column: number;
+        direction: "asc" | "desc";
+      };
+    };
     teams: {
       column1: string;
       column2: string;
@@ -68,6 +78,16 @@ export interface ManagerState {
       ownedAvailableColumn4: string;
       takenColumn1: string;
       takenColumn2: string;
+      sortBy: {
+        column: number;
+        direction: "asc" | "desc";
+      };
+    };
+    leaguemateLeagues: {
+      column1: string;
+      column2: string;
+      column3: string;
+      column4: string;
       sortBy: {
         column: number;
         direction: "asc" | "desc";
@@ -116,6 +136,16 @@ const initialState: ManagerState = {
       teamFilter: "All",
       draftClassFilter: "All",
     },
+    leaguemates: {
+      column1: "# Common",
+      column2: "Avg KTC S Rk",
+      column3: "Lm Avg KTC S Rk",
+      column4: "Avg KTC S Rk \u0394",
+      sortBy: {
+        column: 1,
+        direction: "desc",
+      },
+    },
     teams: {
       column1: "KTC S",
       column2: "KTC B",
@@ -140,6 +170,16 @@ const initialState: ManagerState = {
       ownedAvailableColumn4: "KTC QB B Rk",
       takenColumn1: "KTC S Rk",
       takenColumn2: "Lm KTC S Rk",
+      sortBy: {
+        column: 0,
+        direction: "asc",
+      },
+    },
+    leaguemateLeagues: {
+      column1: "KTC S Rk",
+      column2: "KTC B Rk",
+      column3: "Lm KTC S Rk",
+      column4: "Lm KTC B Rk",
       sortBy: {
         column: 0,
         direction: "asc",
@@ -181,6 +221,12 @@ const managerSlice = createSlice({
         [action.payload.key]: action.payload.value,
       };
     },
+    setLeaguematesTabState(state, action) {
+      state.tabs.leaguemates = {
+        ...state.tabs.leaguemates,
+        [action.payload.key]: action.payload.value,
+      };
+    },
     setTeamsTabState(state, action) {
       state.tabs.teams = {
         ...state.tabs.teams,
@@ -196,6 +242,12 @@ const managerSlice = createSlice({
     setPlayerLeaguesTabState(state, action) {
       state.tabs.playerLeagues = {
         ...state.tabs.playerLeagues,
+        [action.payload.key]: action.payload.value,
+      };
+    },
+    setLeaguemateLeaguesTabState(state, action) {
+      state.tabs.leaguemateLeagues = {
+        ...state.tabs.leaguemateLeagues,
         [action.payload.key]: action.payload.value,
       };
     },
@@ -246,9 +298,11 @@ export const {
   resetLeaguesProgress,
   setLeaguesTabState,
   setPlayersTabState,
+  setLeaguematesTabState,
   setTeamsTabState,
   setRosterTabState,
   setPlayerLeaguesTabState,
+  setLeaguemateLeaguesTabState,
 } = managerSlice.actions;
 
 export default managerSlice.reducer;

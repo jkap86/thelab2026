@@ -101,8 +101,6 @@ export const fetchLeagues = createAsyncThunk<
         parsedLeaguesArray.map((league) => [league.league_id, league])
       );
 
-      console.log({ leagues });
-
       const { playershares, leaguemates } = getLeagueTotals(
         Object.values(leagues)
       );

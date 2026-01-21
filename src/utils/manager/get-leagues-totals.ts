@@ -55,6 +55,17 @@ export const getLeagueTotals = (leagues: League[]) => {
 
           playershares[pickId].owned.push(league.league_id);
         });
+      } else {
+        if (!leaguemates[roster.user_id]) {
+          leaguemates[roster.user_id] = {
+            user_id: roster.user_id,
+            username: roster.username,
+            avatar: roster.avatar,
+            leagues: [],
+          };
+        }
+
+        leaguemates[roster.user_id].leagues.push(league.league_id);
       }
     });
   });
