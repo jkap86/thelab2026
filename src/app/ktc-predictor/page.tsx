@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   ComposedChart,
@@ -119,7 +119,7 @@ function ConfidenceBadge({ score, factors }: { score: number; factors?: Confiden
   );
 }
 
-export default function KtcPredictorPage() {
+function KtcPredictorContent() {
   const data = chartData as ChartDataOutput;
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -550,5 +550,13 @@ export default function KtcPredictorPage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function KtcPredictorPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-900 text-white p-8">Loading...</div>}>
+      <KtcPredictorContent />
+    </Suspense>
   );
 }
