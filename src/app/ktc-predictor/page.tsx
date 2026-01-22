@@ -489,7 +489,7 @@ function KtcPredictorContent() {
             {inputText && (
               <button
                 onClick={clearPlayer}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-2xl"
                 type="button"
                 style={{ marginTop: showCompareInput || comparePlayerId ? "12px" : "0" }}
               >
@@ -520,7 +520,7 @@ function KtcPredictorContent() {
               />
               <button
                 onClick={clearCompare}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-2xl"
                 type="button"
                 style={{ marginTop: "12px" }}
               >
