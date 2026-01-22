@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import {
   ComposedChart,
   Scatter,
-  LineChart,
   Line,
   XAxis,
   YAxis,
@@ -14,6 +13,7 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceDot,
 } from 'recharts';
 import chartData from './chart-data.json';
 
@@ -47,18 +47,34 @@ interface PlayerChartData {
   seasons: SeasonData[];
 }
 
+interface YearModelMetrics {
+  trainYears: string;
+  trainSamples: number;
+  testSamples: number;
+  mae: number;
+  r2: number;
+}
+
 interface ChartDataOutput {
   players: PlayerChartData[];
   metadata: {
     generatedAt: string;
     totalPlayers: number;
     totalSeasons: number;
+    modelsByYear?: Record<string, YearModelMetrics>;
   };
 }
 
 interface UpcomingPrediction {
   projectedFPPerGame: number;
   predictedKtc: number;
+}
+
+interface ActualPerformance {
+  gamesPlayed: number;
+  fpPerGame: number;
+  actualEndKtc: number;
+  predictedAtActualFP: number;
 }
 
 interface UpcomingPredictionResponse {
@@ -74,6 +90,10 @@ interface UpcomingPredictionResponse {
   confidenceFactors: ConfidenceFactors;
   breakevenFPPerGame: number | null;
   predictions: UpcomingPrediction[];
+  // Historical mode fields
+  isHistorical?: boolean;
+  historicalYear?: number;
+  actualPerformance?: ActualPerformance;
 }
 
 function ConfidenceBadge({ score, factors }: { score: number; factors?: ConfidenceFactors }) {
@@ -119,6 +139,9 @@ function ConfidenceBadge({ score, factors }: { score: number; factors?: Confiden
   );
 }
 
+// Available years for filtering
+const AVAILABLE_YEARS = [2022, 2023, 2024, 2025] as const;
+
 function KtcPredictorContent() {
   const data = chartData as ChartDataOutput;
   const searchParams = useSearchParams();
@@ -127,10 +150,16 @@ function KtcPredictorContent() {
   // Read from URL params
   const selectedPlayerId = searchParams.get('player') || '';
   const projectedGames = parseInt(searchParams.get('games') || '17', 10) || 17;
+  const selectedYear = parseInt(searchParams.get('year') || '0', 10) as typeof AVAILABLE_YEARS[number] | 0;
 
   const [upcomingPredictions, setUpcomingPredictions] = useState<UpcomingPredictionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [inputText, setInputText] = useState('');
+
+  // Get model metrics for selected year
+  const yearMetrics = selectedYear && data.metadata.modelsByYear
+    ? data.metadata.modelsByYear[selectedYear.toString()]
+    : null;
 
   const selectedPlayer = data.players.find(p => p.playerId === selectedPlayerId);
 
@@ -172,6 +201,26 @@ function KtcPredictorContent() {
     router.push(`?${params.toString()}`, { scroll: false });
   }, [searchParams, router]);
 
+  const setSelectedYear = useCallback((year: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (year === 0) {
+      params.delete('year');
+    } else {
+      params.set('year', year.toString());
+    }
+    router.push(`?${params.toString()}`, { scroll: false });
+  }, [searchParams, router]);
+
+  // When year changes, set games to actual games played that season
+  useEffect(() => {
+    if (selectedYear !== 0 && selectedPlayer) {
+      const historicalSeason = selectedPlayer.seasons.find(s => s.year === selectedYear);
+      if (historicalSeason) {
+        setProjectedGames(historicalSeason.gamesPlayed);
+      }
+    }
+  }, [selectedYear, selectedPlayer, setProjectedGames]);
+
   // Handle player selection from datalist
   const handlePlayerInput = useCallback((inputValue: string) => {
     setInputText(inputValue);
@@ -191,7 +240,7 @@ function KtcPredictorContent() {
     setSelectedPlayerId('');
   }, [setSelectedPlayerId]);
 
-  // Fetch upcoming predictions when player or games changes
+  // Fetch upcoming predictions when player, games, or year changes
   useEffect(() => {
     if (!selectedPlayerId) {
       setUpcomingPredictions(null);
@@ -199,25 +248,41 @@ function KtcPredictorContent() {
     }
 
     setLoading(true);
-    fetch(`/api/ktc-predict?playerId=${selectedPlayerId}&games=${projectedGames}`)
+
+    // Build URL with optional year parameter
+    let url = `/api/ktc-predict?playerId=${selectedPlayerId}&games=${projectedGames}`;
+    if (selectedYear !== 0) {
+      url += `&year=${selectedYear}`;
+    }
+
+    fetch(url)
       .then(r => r.json())
       .then(data => {
         setUpcomingPredictions(data);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [selectedPlayerId, projectedGames]);
+  }, [selectedPlayerId, projectedGames, selectedYear]);
 
-  // Prepare historical chart data - vectors from actual to predicted
-  const vectorData = selectedPlayer?.seasons.map(s => {
-    const fpPerGame = s.gamesPlayed > 0 ? s.fantasyPoints / s.gamesPlayed : 0;
-    return {
-      x: fpPerGame,
-      actual: s.actualEndKtc,
-      predicted: s.predictedEndKtc,
-      year: s.year,
-    };
-  }) || [];
+  // Filter seasons by selected year (0 = all years)
+  // Historical Performance shows years BEFORE selected year (model's track record)
+  const filteredSeasons = selectedPlayer?.seasons.filter(s =>
+    selectedYear === 0 || s.year < selectedYear
+  ) || [];
+
+  // Prepare historical chart data - vectors from actual to predicted (filtered by year)
+  // Only include seasons with valid predictions (not -1)
+  const vectorData = filteredSeasons
+    .filter(s => s.predictedEndKtc >= 0)
+    .map(s => {
+      const fpPerGame = s.gamesPlayed > 0 ? s.fantasyPoints / s.gamesPlayed : 0;
+      return {
+        x: fpPerGame,
+        actual: s.actualEndKtc,
+        predicted: s.predictedEndKtc,
+        year: s.year,
+      };
+    });
 
   // Position-specific max FP/game for chart scaling (matches API)
   const maxFpPerGame = 25;
@@ -225,9 +290,55 @@ function KtcPredictorContent() {
   return (
     <main className="min-h-screen w-full p-8 bg-gray-900 text-white">
       <h1 className="text-3xl font-bold mb-4 text-center">KTC Prediction Model</h1>
-      <p className="text-center mb-6 text-gray-400">
-        XGBoost Model (39 features) | R² = 0.944 | MAE = 169 pts | {data.metadata.totalPlayers} players
+      <p className="text-center mb-2 text-gray-400">
+        XGBoost Model (39 features) | Rolling Year Validation | {data.metadata.totalPlayers} players
       </p>
+
+      {/* Year Filter Tabs */}
+      <div className="flex justify-center gap-2 mb-6">
+        {AVAILABLE_YEARS.map(year => {
+          const metrics = data.metadata.modelsByYear?.[year.toString()];
+          return (
+            <button
+              key={year}
+              onClick={() => setSelectedYear(year)}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                selectedYear === year
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              }`}
+              title={metrics ? `Trained on ${metrics.trainYears}, MAE: ${Math.round(metrics.mae)} pts` : ''}
+            >
+              {year}
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setSelectedYear(0)}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            selectedYear === 0
+              ? 'bg-purple-600 text-white'
+              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+          }`}
+          title="Prediction for 2026 season using model trained on 2021-2025"
+        >
+          2026
+        </button>
+      </div>
+
+      {/* Year-specific model info */}
+      {yearMetrics && (
+        <p className="text-center mb-6 text-sm text-gray-500">
+          Model trained on <span className="text-purple-400">{yearMetrics.trainYears}</span> |{' '}
+          R² = <span className="text-green-400">{yearMetrics.r2.toFixed(4)}</span> |{' '}
+          MAE = <span className="text-yellow-400">{Math.round(yearMetrics.mae)} pts</span>
+        </p>
+      )}
+      {selectedYear === 0 && (
+        <p className="text-center mb-6 text-sm text-gray-500">
+          2026 Projection | Model trained on <span className="text-purple-400">2021-2025</span> (all available data)
+        </p>
+      )}
 
       {/* Player Selector */}
       <div className="max-w-md mx-auto mb-8 relative">
@@ -286,8 +397,9 @@ function KtcPredictorContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedPlayer.seasons.map(season => {
-                    const error = season.predictedEndKtc - season.actualEndKtc;
+                  {filteredSeasons.map(season => {
+                    const hasPrediction = season.predictedEndKtc >= 0;
+                    const error = hasPrediction ? season.predictedEndKtc - season.actualEndKtc : 0;
                     const fpPerGame = season.gamesPlayed > 0 ? season.fantasyPoints / season.gamesPlayed : 0;
                     return (
                       <tr key={season.year} className="border-b border-gray-700">
@@ -301,10 +413,10 @@ function KtcPredictorContent() {
                           {season.actualEndKtc.toLocaleString()}
                         </td>
                         <td className="py-4 px-6 text-center text-green-400">
-                          {season.predictedEndKtc.toLocaleString()}
+                          {hasPrediction ? season.predictedEndKtc.toLocaleString() : <span className="text-gray-500">N/A</span>}
                         </td>
-                        <td className={`py-4 px-6 text-center ${error > 0 ? 'text-red-400' : 'text-blue-400'}`}>
-                          {error > 0 ? '+' : ''}{error.toLocaleString()}
+                        <td className={`py-4 px-6 text-center ${hasPrediction ? (error > 0 ? 'text-red-400' : 'text-blue-400') : ''}`}>
+                          {hasPrediction ? (error > 0 ? '+' : '') + error.toLocaleString() : <span className="text-gray-500">N/A</span>}
                         </td>
                       </tr>
                     );
@@ -318,11 +430,23 @@ function KtcPredictorContent() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Chart 1: Historical */}
             <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="text-xl font-semibold mb-4 text-center">Historical Performance</h3>
+              <h3 className="text-xl font-semibold mb-4 text-center">
+                Historical Performance {selectedYear ? `(${selectedYear})` : ''}
+              </h3>
               <p className="text-center text-gray-500 text-sm mb-4">
-                Past seasons: Actual vs Predicted End KTC
+                {selectedYear
+                  ? `${selectedYear} season: Out-of-sample prediction (model trained on ${yearMetrics?.trainYears || 'prior years'})`
+                  : 'Past seasons: Actual vs Predicted End KTC (rolling validation)'
+                }
               </p>
               <div className="h-[400px]">
+                {filteredSeasons.length === 0 ? (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-gray-400">
+                      {`No historical data before ${selectedYear}`}
+                    </p>
+                  </div>
+                ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={vectorData} margin={{ top: 20, right: 20, bottom: 40, left: 40 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -332,8 +456,8 @@ function KtcPredictorContent() {
                       name="FP/Game"
                       domain={[0, maxFpPerGame]}
                       allowDataOverflow={true}
+                      ticks={[0, 5, 10, 15, 20, 25]}
                       tick={{ fill: '#9CA3AF' }}
-                      tickFormatter={(value: number) => value.toFixed(1)}
                       label={{
                         value: 'Fantasy Points / Game',
                         position: 'bottom',
@@ -345,7 +469,9 @@ function KtcPredictorContent() {
                       type="number"
                       domain={[0, 9999]}
                       allowDataOverflow={true}
-                      tick={{ fill: '#9CA3AF' }}
+                      ticks={[0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]}
+                      interval={0}
+                      tick={{ fill: '#9CA3AF', fontSize: 11 }}
                       tickFormatter={(value: number) => value.toLocaleString()}
                       label={{
                         value: 'End KTC',
@@ -398,24 +524,37 @@ function KtcPredictorContent() {
                     ))}
                   </ComposedChart>
                 </ResponsiveContainer>
+                )}
               </div>
               <div className="mt-4 text-center text-gray-500 text-xs">
-                <p>Purple dot: Actual | Green dot: Predicted | Line: Error (green=over, red=under)</p>
+                <p>Purple: Actual KTC | Green: Predicted KTC | Line: <span className="text-green-500">overestimated</span> / <span className="text-red-500">underestimated</span></p>
               </div>
             </div>
 
-            {/* Chart 2: Upcoming Season Prediction */}
+            {/* Chart 2: Upcoming/Historical Season Projection */}
             <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="text-xl font-semibold mb-4 text-center">2026 Season Projection</h3>
+              <h3 className="text-xl font-semibold mb-4 text-center">
+                {selectedYear !== 0
+                  ? `${selectedYear} Season Projection (Historical)`
+                  : '2026 Season Projection'
+                }
+              </h3>
               <p className="text-center text-gray-500 text-sm mb-2">
-                Predicted End KTC by Projected FP/Game
+                {selectedYear !== 0
+                  ? `What the model would have predicted before the ${selectedYear} season`
+                  : 'Predicted End KTC by Projected FP/Game'
+                }
               </p>
 
               {/* Games Played Slider */}
               <div className="mb-4 px-4">
                 <label htmlFor="games-slider" className="block text-sm text-gray-400 mb-1">
                   Projected Games Played: <span className="text-white font-semibold">{projectedGames}</span>
-                  {upcomingPredictions?.historicalAvgGames && (
+                  {upcomingPredictions?.isHistorical && upcomingPredictions.actualPerformance ? (
+                    <span className="text-gray-500 ml-2">
+                      (Actual: {upcomingPredictions.actualPerformance.gamesPlayed})
+                    </span>
+                  ) : upcomingPredictions?.historicalAvgGames && (
                     <span className="text-gray-500 ml-2">
                       (Historical avg: {upcomingPredictions.historicalAvgGames})
                     </span>
@@ -443,7 +582,7 @@ function KtcPredictorContent() {
                   </div>
                 ) : upcomingPredictions ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
+                    <ComposedChart
                       data={upcomingPredictions.predictions}
                       margin={{ top: 20, right: 20, bottom: 40, left: 40 }}
                     >
@@ -451,9 +590,9 @@ function KtcPredictorContent() {
                       <XAxis
                         dataKey="projectedFPPerGame"
                         type="number"
-                        domain={[0, 'auto']}
+                        domain={[0, 25]}
+                        ticks={[0, 5, 10, 15, 20, 25]}
                         tick={{ fill: '#9CA3AF' }}
-                        tickFormatter={(value: number) => value.toFixed(1)}
                         label={{
                           value: 'Projected FP / Game',
                           position: 'bottom',
@@ -465,7 +604,9 @@ function KtcPredictorContent() {
                         type="number"
                         domain={[0, 9999]}
                         allowDataOverflow={true}
-                        tick={{ fill: '#9CA3AF' }}
+                        ticks={[0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]}
+                        interval={0}
+                        tick={{ fill: '#9CA3AF', fontSize: 11 }}
                         tickFormatter={(value: number) => value.toLocaleString()}
                         label={{
                           value: 'Predicted End KTC',
@@ -494,21 +635,25 @@ function KtcPredictorContent() {
                         dataKey="predictedKtc"
                         stroke="#10B981"
                         strokeWidth={3}
-                        dot={{ fill: '#10B981', strokeWidth: 2, r: 5 }}
+                        dot={false}
                         activeDot={{ r: 8 }}
                       />
+                      {/* Reference line for start/current KTC */}
                       <ReferenceLine
-                        y={selectedPlayer?.latestKtc}
+                        y={upcomingPredictions.latestKtc}
                         stroke="#8B5CF6"
                         strokeDasharray="5 5"
                         strokeWidth={2}
                         label={{
-                          value: `Current: ${selectedPlayer?.latestKtc.toLocaleString()}`,
+                          value: upcomingPredictions.isHistorical
+                            ? `Start: ${upcomingPredictions.latestKtc.toLocaleString()}`
+                            : `Current: ${upcomingPredictions.latestKtc.toLocaleString()}`,
                           position: 'right',
                           fill: '#8B5CF6',
                           fontSize: 12,
                         }}
                       />
+                      {/* Breakeven line */}
                       {upcomingPredictions?.breakevenFPPerGame && (
                         <ReferenceLine
                           x={upcomingPredictions.breakevenFPPerGame}
@@ -523,7 +668,45 @@ function KtcPredictorContent() {
                           }}
                         />
                       )}
-                    </LineChart>
+                      {/* Historical mode: Show actual outcome markers */}
+                      {upcomingPredictions.isHistorical && upcomingPredictions.actualPerformance && (
+                        <>
+                          {/* Actual end KTC marker (purple) */}
+                          <ReferenceDot
+                            x={upcomingPredictions.actualPerformance.fpPerGame}
+                            y={upcomingPredictions.actualPerformance.actualEndKtc}
+                            r={8}
+                            fill="#8B5CF6"
+                            stroke="#fff"
+                            strokeWidth={2}
+                          />
+                          {/* Predicted KTC at actual FP/game marker (green) */}
+                          <ReferenceDot
+                            x={upcomingPredictions.actualPerformance.fpPerGame}
+                            y={upcomingPredictions.actualPerformance.predictedAtActualFP}
+                            r={8}
+                            fill="#10B981"
+                            stroke="#fff"
+                            strokeWidth={2}
+                          />
+                          {/* Error vector line between predicted and actual */}
+                          <ReferenceLine
+                            segment={[
+                              {
+                                x: upcomingPredictions.actualPerformance.fpPerGame,
+                                y: upcomingPredictions.actualPerformance.predictedAtActualFP
+                              },
+                              {
+                                x: upcomingPredictions.actualPerformance.fpPerGame,
+                                y: upcomingPredictions.actualPerformance.actualEndKtc
+                              }
+                            ]}
+                            stroke={upcomingPredictions.actualPerformance.actualEndKtc > upcomingPredictions.actualPerformance.predictedAtActualFP ? '#10B981' : '#EF4444'}
+                            strokeWidth={3}
+                          />
+                        </>
+                      )}
+                    </ComposedChart>
                   </ResponsiveContainer>
                 ) : (
                   <div className="flex items-center justify-center h-full">
@@ -533,9 +716,21 @@ function KtcPredictorContent() {
               </div>
               {upcomingPredictions && (
                 <div className="mt-4 text-center text-gray-500 text-xs">
-                  <p>
-                    Purple line: Current KTC | Orange line: Breakeven FP/Game to maintain value
-                  </p>
+                  {upcomingPredictions.isHistorical && upcomingPredictions.actualPerformance ? (
+                    <p>
+                      Purple: Actual ({upcomingPredictions.actualPerformance.actualEndKtc.toLocaleString()}) |
+                      Green: Predicted ({upcomingPredictions.actualPerformance.predictedAtActualFP.toLocaleString()}) |
+                      {upcomingPredictions.actualPerformance.predictedAtActualFP > upcomingPredictions.actualPerformance.actualEndKtc ? (
+                        <span className="text-green-500"> overestimated by {(upcomingPredictions.actualPerformance.predictedAtActualFP - upcomingPredictions.actualPerformance.actualEndKtc).toLocaleString()}</span>
+                      ) : (
+                        <span className="text-red-500"> underestimated by {(upcomingPredictions.actualPerformance.actualEndKtc - upcomingPredictions.actualPerformance.predictedAtActualFP).toLocaleString()}</span>
+                      )}
+                    </p>
+                  ) : (
+                    <p>
+                      Purple line: Current KTC | Orange line: Breakeven FP/Game to maintain value
+                    </p>
+                  )}
                 </div>
               )}
             </div>

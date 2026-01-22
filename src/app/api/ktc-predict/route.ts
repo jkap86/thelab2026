@@ -37,6 +37,7 @@ interface SeasonData {
   year: number;
   fantasyPoints: number;
   gamesPlayed: number;
+  startKtc: number;
   actualEndKtc: number;
   predictedEndKtc: number;
 }
@@ -301,10 +302,44 @@ function predictKtcForFPAndGames(
     baselineFP,
     projectedFP,
     projectedGames,
-    player.ktc30dTrend || 0,  // NEW: KTC momentum
-    player.ktc90dTrend || 0,  // NEW: KTC momentum
-    0.5,  // NEW: Draft round value (default, not available in chart data)
-    0.5   // NEW: Draft pick value (default, not available in chart data)
+    player.ktc30dTrend || 0,
+    player.ktc90dTrend || 0,
+    0.5,  // Draft round value (default)
+    0.5   // Draft pick value (default)
+  );
+
+  const predictedNorm = predictXGBoost(model, features);
+  const predictedKtc = Math.round(predictedNorm * KTC_MAX_VALUE);
+
+  // Cap at 9999
+  return Math.min(predictedKtc, KTC_MAX_VALUE);
+}
+
+// Historical prediction function - uses season's starting data
+function predictKtcForFPAndGamesHistorical(
+  player: PlayerChartData,
+  season: SeasonData,
+  baselineFP: number,
+  projectedFP: number,
+  projectedGames: number,
+  ageAtSeason: number,
+  yearsExpAtSeason: number
+): number {
+  const model = loadProjectionModel();
+
+  const features = extractProjectionFeatures(
+    season.startKtc,        // Use season's starting KTC
+    ageAtSeason,            // Age at that season
+    yearsExpAtSeason,       // Years exp at that season
+    player.position,
+    player.historicalSnapPct || 0.8,
+    baselineFP,
+    projectedFP,
+    projectedGames,
+    player.ktc30dTrend || 0,  // KTC momentum (use player's trends)
+    player.ktc90dTrend || 0,
+    0.5,  // Draft round value (default)
+    0.5   // Draft pick value (default)
   );
 
   const predictedNorm = predictXGBoost(model, features);
@@ -318,6 +353,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const playerId = searchParams.get('playerId');
   const gamesParam = searchParams.get('games');
+  const yearParam = searchParams.get('year');
 
   if (!playerId) {
     return NextResponse.json({ error: 'playerId is required' }, { status: 400 });
@@ -325,6 +361,7 @@ export async function GET(req: NextRequest) {
 
   // Default to 17 games (full season) if not specified
   const projectedGames = gamesParam ? parseInt(gamesParam, 10) : 17;
+  const historicalYear = yearParam ? parseInt(yearParam, 10) : null;
 
   if (isNaN(projectedGames) || projectedGames < 1 || projectedGames > 17) {
     return NextResponse.json({ error: 'games must be between 1 and 17' }, { status: 400 });
@@ -353,6 +390,22 @@ export async function GET(req: NextRequest) {
       fpPerGameRange.push(fp);
     }
 
+    // Check if this is a historical year request
+    const historicalSeason = historicalYear
+      ? player.seasons.find(s => s.year === historicalYear)
+      : null;
+
+    // Calculate age/yearsExp at historical season if applicable
+    const latestSeasonYear = player.seasons.length > 0
+      ? Math.max(...player.seasons.map(s => s.year))
+      : 2025;
+    const yearsDiff = historicalYear ? latestSeasonYear - historicalYear + 1 : 0;
+    const ageAtSeason = historicalSeason ? player.currentAge - yearsDiff : player.currentAge;
+    const yearsExpAtSeason = historicalSeason ? Math.max(0, player.yearsExp - yearsDiff) : player.yearsExp;
+
+    // Use startKtc from historical season or latestKtc for current projection
+    const baseKtc = historicalSeason ? historicalSeason.startKtc : player.latestKtc;
+
     // Calculate historical average games for context
     const historicalAvgGames = player.seasons.length > 0
       ? Math.round(player.seasons.reduce((sum, s) => sum + s.gamesPlayed, 0) / player.seasons.length)
@@ -361,15 +414,28 @@ export async function GET(req: NextRequest) {
     // Generate predictions using the projection model
     const predictions = fpPerGameRange.map(fpPerGame => {
       const totalFP = fpPerGame * projectedGames;
-      return {
-        projectedFPPerGame: fpPerGame,
-        predictedKtc: predictKtcForFPAndGames(player, baselineFP, totalFP, projectedGames),
-      };
+
+      if (historicalSeason) {
+        // Use historical prediction function
+        return {
+          projectedFPPerGame: fpPerGame,
+          predictedKtc: predictKtcForFPAndGamesHistorical(
+            player, historicalSeason, baselineFP, totalFP, projectedGames,
+            ageAtSeason, yearsExpAtSeason
+          ),
+        };
+      } else {
+        // Use standard prediction function
+        return {
+          projectedFPPerGame: fpPerGame,
+          predictedKtc: predictKtcForFPAndGames(player, baselineFP, totalFP, projectedGames),
+        };
+      }
     });
 
-    // Find breakeven point (where predicted KTC = current KTC)
+    // Find breakeven point (where predicted KTC = base KTC)
     let breakevenFPPerGame: number | null = null;
-    const targetKtc = player.latestKtc;
+    const targetKtc = baseKtc;
 
     // Binary search for breakeven
     const maxFpPerGame = fpPerGameRange[fpPerGameRange.length - 1];
@@ -379,7 +445,13 @@ export async function GET(req: NextRequest) {
     for (let i = 0; i < 20; i++) {
       const mid = (low + high) / 2;
       const totalFP = mid * projectedGames;
-      const predictedKtc = predictKtcForFPAndGames(player, baselineFP, totalFP, projectedGames);
+
+      const predictedKtc = historicalSeason
+        ? predictKtcForFPAndGamesHistorical(
+            player, historicalSeason, baselineFP, totalFP, projectedGames,
+            ageAtSeason, yearsExpAtSeason
+          )
+        : predictKtcForFPAndGames(player, baselineFP, totalFP, projectedGames);
 
       if (Math.abs(predictedKtc - targetKtc) < 10) {
         breakevenFPPerGame = Math.round(mid * 10) / 10;
@@ -402,20 +474,43 @@ export async function GET(req: NextRequest) {
       predictions.sort((a, b) => a.projectedFPPerGame - b.projectedFPPerGame);
     }
 
-    return NextResponse.json({
+    // Build response - include historical data if applicable
+    const response: Record<string, unknown> = {
       playerId: player.playerId,
       name: player.name,
       position: player.position,
-      currentAge: player.currentAge,
-      yearsExp: player.yearsExp,
-      latestKtc: player.latestKtc,
+      currentAge: historicalSeason ? ageAtSeason : player.currentAge,
+      yearsExp: historicalSeason ? yearsExpAtSeason : player.yearsExp,
+      latestKtc: baseKtc,
       projectedGames,
       historicalAvgGames,
       confidenceScore: player.confidenceScore,
       confidenceFactors: player.confidenceFactors,
       breakevenFPPerGame,
       predictions,
-    });
+    };
+
+    // Add historical-specific fields
+    if (historicalSeason) {
+      const actualFpPerGame = historicalSeason.gamesPlayed > 0
+        ? historicalSeason.fantasyPoints / historicalSeason.gamesPlayed
+        : 0;
+
+      // Use the prediction from the rolling historical model (stored in chart data)
+      // This is the true out-of-sample prediction from the model trained on prior years
+      const predictedAtActualFP = historicalSeason.predictedEndKtc;
+
+      response.isHistorical = true;
+      response.historicalYear = historicalYear;
+      response.actualPerformance = {
+        gamesPlayed: historicalSeason.gamesPlayed,
+        fpPerGame: Math.round(actualFpPerGame * 10) / 10,
+        actualEndKtc: historicalSeason.actualEndKtc,
+        predictedAtActualFP,
+      };
+    }
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error in ktc-predict API:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
