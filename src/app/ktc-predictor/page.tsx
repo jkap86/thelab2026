@@ -167,6 +167,7 @@ function KtcPredictorContent() {
 
   // Read from URL params
   const selectedPlayerId = searchParams.get("player") || "";
+  const comparePlayerId = searchParams.get("compare") || "";
   const projectedGames = parseInt(searchParams.get("games") || "17", 10) || 17;
   const selectedYear = parseInt(searchParams.get("year") || "0", 10) as
     | (typeof AVAILABLE_YEARS)[number]
@@ -174,8 +175,12 @@ function KtcPredictorContent() {
 
   const [upcomingPredictions, setUpcomingPredictions] =
     useState<UpcomingPredictionResponse | null>(null);
+  const [comparePredictions, setComparePredictions] =
+    useState<UpcomingPredictionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [inputText, setInputText] = useState("");
+  const [compareInputText, setCompareInputText] = useState("");
+  const [showCompareInput, setShowCompareInput] = useState(false);
 
   // Get model metrics for selected year
   const yearMetrics =
@@ -186,6 +191,9 @@ function KtcPredictorContent() {
   const selectedPlayer = data.players.find(
     (p) => p.playerId === selectedPlayerId,
   );
+  const comparePlayer = data.players.find(
+    (p) => p.playerId === comparePlayerId,
+  );
 
   // Sync input text with selected player
   useEffect(() => {
@@ -195,6 +203,16 @@ function KtcPredictorContent() {
       setInputText("");
     }
   }, [selectedPlayer]);
+
+  // Sync compare input text with compare player
+  useEffect(() => {
+    if (comparePlayer) {
+      setCompareInputText(`${comparePlayer.name} (${comparePlayer.position})`);
+      setShowCompareInput(true);
+    } else {
+      setCompareInputText("");
+    }
+  }, [comparePlayer]);
 
   // Initialize games param if not present
   useEffect(() => {
@@ -244,6 +262,19 @@ function KtcPredictorContent() {
     [searchParams, router],
   );
 
+  const setComparePlayerId = useCallback(
+    (playerId: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (playerId) {
+        params.set("compare", playerId);
+      } else {
+        params.delete("compare");
+      }
+      router.push(`?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router],
+  );
+
   // When year changes, set games to actual games played that season
   useEffect(() => {
     if (selectedYear !== 0 && selectedPlayer) {
@@ -277,31 +308,72 @@ function KtcPredictorContent() {
   const clearPlayer = useCallback(() => {
     setInputText("");
     setSelectedPlayerId("");
-  }, [setSelectedPlayerId]);
+    // Also clear comparison when main player is cleared
+    setCompareInputText("");
+    setComparePlayerId("");
+    setShowCompareInput(false);
+  }, [setSelectedPlayerId, setComparePlayerId]);
+
+  // Handle compare player selection from datalist
+  const handleComparePlayerInput = useCallback(
+    (inputValue: string) => {
+      setCompareInputText(inputValue);
+      const player = data.players.find(
+        (p) => `${p.name} (${p.position})` === inputValue,
+      );
+      if (player) {
+        setComparePlayerId(player.playerId);
+      } else if (inputValue === "") {
+        setComparePlayerId("");
+      }
+    },
+    [data.players, setComparePlayerId],
+  );
+
+  // Clear compare player
+  const clearCompare = useCallback(() => {
+    setCompareInputText("");
+    setComparePlayerId("");
+    setShowCompareInput(false);
+  }, [setComparePlayerId]);
 
   // Fetch upcoming predictions when player, games, or year changes
   useEffect(() => {
     if (!selectedPlayerId) {
       setUpcomingPredictions(null);
+      setComparePredictions(null);
       return;
     }
 
     setLoading(true);
 
-    // Build URL with optional year parameter
-    let url = `/api/ktc-predict?playerId=${selectedPlayerId}&games=${projectedGames}`;
+    // Build URLs
+    let url1 = `/api/ktc-predict?playerId=${selectedPlayerId}&games=${projectedGames}`;
     if (selectedYear !== 0) {
-      url += `&year=${selectedYear}`;
+      url1 += `&year=${selectedYear}`;
     }
 
-    fetch(url)
-      .then((r) => r.json())
-      .then((data) => {
-        setUpcomingPredictions(data);
+    const promises: Promise<UpcomingPredictionResponse>[] = [
+      fetch(url1).then((r) => r.json()),
+    ];
+
+    // Add second player if comparing
+    if (comparePlayerId) {
+      let url2 = `/api/ktc-predict?playerId=${comparePlayerId}&games=${projectedGames}`;
+      if (selectedYear !== 0) {
+        url2 += `&year=${selectedYear}`;
+      }
+      promises.push(fetch(url2).then((r) => r.json()));
+    }
+
+    Promise.all(promises)
+      .then(([primary, compare]) => {
+        setUpcomingPredictions(primary);
+        setComparePredictions(compare || null);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [selectedPlayerId, projectedGames, selectedYear]);
+  }, [selectedPlayerId, comparePlayerId, projectedGames, selectedYear]);
 
   // Filter seasons by selected year (0 = all years)
   // Historical Performance shows years BEFORE selected year (model's track record)
@@ -396,121 +468,279 @@ function KtcPredictorContent() {
         </p>
       )}
 
-      {/* Player Selector */}
-      <div className="max-w-md mx-auto mb-8 relative">
-        <input
-          type="text"
-          list="player-list"
-          value={inputText}
-          onChange={(e) => handlePlayerInput(e.target.value)}
-          placeholder="Search for a player..."
-          className="w-full p-3 pr-10 bg-gray-800 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-        />
-        {inputText && (
-          <button
-            onClick={clearPlayer}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-            type="button"
-          >
-            ✕
-          </button>
-        )}
-        <datalist id="player-list">
-          {data.players.map((player) => (
-            <option
-              key={player.playerId}
-              value={`${player.name} (${player.position})`}
+      {/* Player Selectors Container */}
+      <div className="max-w-3xl mx-auto mb-8">
+        <div className={`grid gap-4 ${showCompareInput || comparePlayerId ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 max-w-md mx-auto"}`}>
+          {/* Primary Player Selector */}
+          <div className="relative">
+            {(showCompareInput || comparePlayerId) && (
+              <label className="block text-sm text-green-400 mb-1 font-medium">Player 1</label>
+            )}
+            <input
+              type="text"
+              list="player-list"
+              value={inputText}
+              onChange={(e) => handlePlayerInput(e.target.value)}
+              placeholder="Search for a player..."
+              className={`w-full p-3 pr-10 bg-gray-800 border rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                showCompareInput || comparePlayerId ? "border-green-600" : "border-gray-600"
+              }`}
             />
-          ))}
-        </datalist>
+            {inputText && (
+              <button
+                onClick={clearPlayer}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                type="button"
+                style={{ marginTop: showCompareInput || comparePlayerId ? "12px" : "0" }}
+              >
+                ✕
+              </button>
+            )}
+            <datalist id="player-list">
+              {data.players.map((player) => (
+                <option
+                  key={player.playerId}
+                  value={`${player.name} (${player.position})`}
+                />
+              ))}
+            </datalist>
+          </div>
+
+          {/* Compare Player Selector - shows when compare mode active */}
+          {(showCompareInput || comparePlayerId) && (
+            <div className="relative">
+              <label className="block text-sm text-blue-400 mb-1 font-medium">Player 2</label>
+              <input
+                type="text"
+                list="compare-player-list"
+                value={compareInputText}
+                onChange={(e) => handleComparePlayerInput(e.target.value)}
+                placeholder="Search for a player to compare..."
+                className="w-full p-3 pr-10 bg-gray-800 border border-blue-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <button
+                onClick={clearCompare}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                type="button"
+                style={{ marginTop: "12px" }}
+              >
+                ✕
+              </button>
+              <datalist id="compare-player-list">
+                {data.players
+                  .filter((p) => p.playerId !== selectedPlayerId)
+                  .map((player) => (
+                    <option
+                      key={player.playerId}
+                      value={`${player.name} (${player.position})`}
+                    />
+                  ))}
+              </datalist>
+            </div>
+          )}
+        </div>
+
+        {/* Compare Button - shows when player is selected and not already comparing */}
+        {selectedPlayer && !showCompareInput && !comparePlayerId && (
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={() => setShowCompareInput(true)}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300 text-sm transition-colors"
+            >
+              + Compare with another player
+            </button>
+          </div>
+        )}
       </div>
 
       {selectedPlayer && (
         <>
-          {/* Player Info */}
-          <div className="text-center mb-8">
-            <h2 className="text-[2rem] font-bold text-purple-400">
-              {selectedPlayer.name}
-            </h2>
-            <p className="text-gray-400 mb-2 text-[1.5rem]">
-              {selectedPlayer.position} | Age: {selectedPlayer.currentAge} |
-              Exp: {selectedPlayer.yearsExp} yrs | Latest KTC:{" "}
-              {selectedPlayer.latestKtc.toLocaleString()}
-            </p>
-            <ConfidenceBadge
-              score={selectedPlayer.confidenceScore}
-              factors={selectedPlayer.confidenceFactors}
-            />
+          {/* Player Info - side by side if comparing */}
+          <div className={`mb-8 ${comparePlayer ? "grid grid-cols-1 md:grid-cols-2 gap-8" : "text-center"}`}>
+            {/* Player 1 */}
+            <div className={comparePlayer ? "text-center" : ""}>
+              <h2 className={`text-[2rem] font-bold ${comparePlayer ? "text-green-400" : "text-purple-400"}`}>
+                {selectedPlayer.name}
+              </h2>
+              <p className="text-gray-400 mb-2 text-[1.5rem]">
+                {selectedPlayer.position} | Age: {selectedPlayer.currentAge} |
+                Exp: {selectedPlayer.yearsExp} yrs | KTC:{" "}
+                {selectedPlayer.latestKtc.toLocaleString()}
+              </p>
+              <ConfidenceBadge
+                score={selectedPlayer.confidenceScore}
+                factors={selectedPlayer.confidenceFactors}
+              />
+            </div>
+
+            {/* Player 2 (if comparing) */}
+            {comparePlayer && (
+              <div className="text-center">
+                <h2 className="text-[2rem] font-bold text-blue-400">
+                  {comparePlayer.name}
+                </h2>
+                <p className="text-gray-400 mb-2 text-[1.5rem]">
+                  {comparePlayer.position} | Age: {comparePlayer.currentAge} |
+                  Exp: {comparePlayer.yearsExp} yrs | KTC:{" "}
+                  {comparePlayer.latestKtc.toLocaleString()}
+                </p>
+                <ConfidenceBadge
+                  score={comparePlayer.confidenceScore}
+                  factors={comparePlayer.confidenceFactors}
+                />
+              </div>
+            )}
           </div>
 
-          {/* Season History Table */}
-          <div className="mb-8 bg-gray-800 rounded-lg p-4">
-            <h3 className="text-xl font-semibold mb-4">Season History</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xl font-black">
-                <thead>
-                  <tr className="text-gray-400 border-b border-gray-700">
-                    <th className="py-4 px-6 text-center">Year</th>
-                    <th className="py-4 px-6 text-center">Games</th>
-                    <th className="py-4 px-6 text-center">FP/Game</th>
-                    <th className="py-4 px-6 text-center">Start KTC</th>
-                    <th className="py-4 px-6 text-center">Actual End KTC</th>
-                    <th className="py-4 px-6 text-center">Predicted End KTC</th>
-                    <th className="py-4 px-6 text-center">Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSeasons.map((season) => {
-                    const hasPrediction = season.predictedEndKtc >= 0;
-                    const error = hasPrediction
-                      ? season.predictedEndKtc - season.actualEndKtc
-                      : 0;
-                    const fpPerGame =
-                      season.gamesPlayed > 0
-                        ? season.fantasyPoints / season.gamesPlayed
+          {/* Season History Tables - side by side if comparing */}
+          <div className={`mb-8 ${comparePlayer ? "grid grid-cols-1 lg:grid-cols-2 gap-4" : ""}`}>
+            {/* Player 1 Season History */}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className={`text-xl font-semibold mb-4 ${comparePlayer ? "text-green-400" : ""}`}>
+                {comparePlayer ? `${selectedPlayer.name} - Season History` : "Season History"}
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xl">
+                  <thead>
+                    <tr className="text-gray-400 border-b border-gray-700">
+                      <th className="py-2 px-3 text-center">Year</th>
+                      <th className="py-2 px-3 text-center">Games</th>
+                      <th className="py-2 px-3 text-center">FP/G</th>
+                      <th className="py-2 px-3 text-center">Start</th>
+                      <th className="py-2 px-3 text-center">Actual</th>
+                      <th className="py-2 px-3 text-center">Predicted</th>
+                      <th className="py-2 px-3 text-center">Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSeasons.map((season) => {
+                      const hasPrediction = season.predictedEndKtc >= 0;
+                      const error = hasPrediction
+                        ? season.predictedEndKtc - season.actualEndKtc
                         : 0;
-                    return (
-                      <tr
-                        key={season.year}
-                        className="border-b border-gray-700"
-                      >
-                        <td className="py-4 px-6 text-center h-[3rem]">
-                          {season.year}
-                        </td>
-                        <td className="py-4 px-6 text-center">
-                          {season.gamesPlayed}
-                        </td>
-                        <td className="py-4 px-6 text-center">
-                          {fpPerGame.toFixed(1)}
-                        </td>
-                        <td className="py-4 px-6 text-center text-gray-300">
-                          {season.startKtc.toLocaleString()}
-                        </td>
-                        <td className="py-4 px-6 text-center text-purple-400">
-                          {season.actualEndKtc.toLocaleString()}
-                        </td>
-                        <td className="py-4 px-6 text-center text-green-400">
-                          {hasPrediction ? (
-                            season.predictedEndKtc.toLocaleString()
-                          ) : (
-                            <span className="text-gray-500">N/A</span>
-                          )}
-                        </td>
-                        <td
-                          className={`py-4 px-6 text-center ${hasPrediction ? (error > 0 ? "text-red-400" : "text-blue-400") : ""}`}
+                      const fpPerGame =
+                        season.gamesPlayed > 0
+                          ? season.fantasyPoints / season.gamesPlayed
+                          : 0;
+                      return (
+                        <tr
+                          key={season.year}
+                          className="border-b border-gray-700"
                         >
-                          {hasPrediction ? (
-                            (error > 0 ? "+" : "") + error.toLocaleString()
-                          ) : (
-                            <span className="text-gray-500">N/A</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <td className="py-2 px-3 text-center">
+                            {season.year}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {season.gamesPlayed}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {fpPerGame.toFixed(1)}
+                          </td>
+                          <td className="py-2 px-3 text-center text-gray-300">
+                            {season.startKtc.toLocaleString()}
+                          </td>
+                          <td className={`py-2 px-3 text-center ${comparePlayer ? "text-green-400" : "text-purple-400"}`}>
+                            {season.actualEndKtc.toLocaleString()}
+                          </td>
+                          <td className="py-2 px-3 text-center text-green-400">
+                            {hasPrediction ? (
+                              season.predictedEndKtc.toLocaleString()
+                            ) : (
+                              <span className="text-gray-500">N/A</span>
+                            )}
+                          </td>
+                          <td
+                            className={`py-2 px-3 text-center ${hasPrediction ? (error > 0 ? "text-red-400" : "text-blue-400") : ""}`}
+                          >
+                            {hasPrediction ? (
+                              (error > 0 ? "+" : "") + error.toLocaleString()
+                            ) : (
+                              <span className="text-gray-500">N/A</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
+
+            {/* Player 2 Season History - only if comparing */}
+            {comparePlayer && (
+              <div className="bg-gray-800 rounded-lg p-4">
+                <h3 className="text-xl font-semibold mb-4 text-blue-400">
+                  {comparePlayer.name} - Season History
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xl">
+                    <thead>
+                      <tr className="text-gray-400 border-b border-gray-700">
+                        <th className="py-2 px-3 text-center">Year</th>
+                        <th className="py-2 px-3 text-center">Games</th>
+                        <th className="py-2 px-3 text-center">FP/G</th>
+                        <th className="py-2 px-3 text-center">Start</th>
+                        <th className="py-2 px-3 text-center">Actual</th>
+                        <th className="py-2 px-3 text-center">Predicted</th>
+                        <th className="py-2 px-3 text-center">Error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comparePlayer.seasons
+                        .filter((s) => selectedYear === 0 || s.year < selectedYear)
+                        .map((season) => {
+                          const hasPrediction = season.predictedEndKtc >= 0;
+                          const error = hasPrediction
+                            ? season.predictedEndKtc - season.actualEndKtc
+                            : 0;
+                          const fpPerGame =
+                            season.gamesPlayed > 0
+                              ? season.fantasyPoints / season.gamesPlayed
+                              : 0;
+                          return (
+                            <tr
+                              key={season.year}
+                              className="border-b border-gray-700"
+                            >
+                              <td className="py-2 px-3 text-center">
+                                {season.year}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                {season.gamesPlayed}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                {fpPerGame.toFixed(1)}
+                              </td>
+                              <td className="py-2 px-3 text-center text-gray-300">
+                                {season.startKtc.toLocaleString()}
+                              </td>
+                              <td className="py-2 px-3 text-center text-blue-400">
+                                {season.actualEndKtc.toLocaleString()}
+                              </td>
+                              <td className="py-2 px-3 text-center text-cyan-400">
+                                {hasPrediction ? (
+                                  season.predictedEndKtc.toLocaleString()
+                                ) : (
+                                  <span className="text-gray-500">N/A</span>
+                                )}
+                              </td>
+                              <td
+                                className={`py-2 px-3 text-center ${hasPrediction ? (error > 0 ? "text-red-400" : "text-blue-400") : ""}`}
+                              >
+                                {hasPrediction ? (
+                                  (error > 0 ? "+" : "") + error.toLocaleString()
+                                ) : (
+                                  <span className="text-gray-500">N/A</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Charts Container */}
@@ -749,18 +979,30 @@ function KtcPredictorContent() {
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
                           const d = payload[0].payload as UpcomingPrediction;
+                          // Find compare prediction at same FP/game
+                          const comparePred = comparePredictions?.predictions.find(
+                            (p) => Math.abs(p.projectedFPPerGame - d.projectedFPPerGame) < 0.01
+                          );
                           return (
                             <div className="bg-gray-800 p-3 rounded border border-gray-600 text-sm">
-                              <p className="text-gray-300">
+                              <p className="text-gray-300 mb-2">
                                 FP/Game: {d.projectedFPPerGame.toFixed(1)}
                               </p>
-                              <p className="text-green-400 font-semibold">
-                                Predicted KTC: {d.predictedKtc.toLocaleString()}
+                              <p className={`font-semibold ${comparePredictions ? "text-green-400" : "text-green-400"}`}>
+                                {comparePredictions ? `${upcomingPredictions?.name}: ` : "Predicted KTC: "}
+                                {d.predictedKtc.toLocaleString()}
                               </p>
+                              {comparePred && (
+                                <p className="text-blue-400 font-semibold">
+                                  {comparePredictions?.name}: {comparePred.predictedKtc.toLocaleString()}
+                                </p>
+                              )}
                             </div>
                           );
                         }}
                       />
+                      {comparePredictions && <Legend />}
+                      {/* Player 1 prediction line (Green) */}
                       <Line
                         type="monotone"
                         dataKey="predictedKtc"
@@ -768,24 +1010,55 @@ function KtcPredictorContent() {
                         strokeWidth={3}
                         dot={false}
                         activeDot={{ r: 8 }}
+                        name={comparePredictions ? upcomingPredictions.name : "Predicted KTC"}
                       />
-                      {/* Reference line for start/current KTC */}
+                      {/* Player 2 prediction line (Blue) - only if comparing */}
+                      {comparePredictions && (
+                        <Line
+                          type="monotone"
+                          data={comparePredictions.predictions}
+                          dataKey="predictedKtc"
+                          stroke="#3B82F6"
+                          strokeWidth={3}
+                          dot={false}
+                          activeDot={{ r: 8 }}
+                          name={comparePredictions.name}
+                        />
+                      )}
+                      {/* Player 1 reference line for start/current KTC (Purple) */}
                       <ReferenceLine
                         y={upcomingPredictions.latestKtc}
-                        stroke="#8B5CF6"
+                        stroke={comparePredictions ? "#10B981" : "#8B5CF6"}
                         strokeDasharray="5 5"
                         strokeWidth={2}
                         label={{
-                          value: upcomingPredictions.isHistorical
-                            ? `Start: ${upcomingPredictions.latestKtc.toLocaleString()}`
-                            : `Current: ${upcomingPredictions.latestKtc.toLocaleString()}`,
+                          value: comparePredictions
+                            ? `${upcomingPredictions.name}: ${upcomingPredictions.latestKtc.toLocaleString()}`
+                            : upcomingPredictions.isHistorical
+                              ? `Start: ${upcomingPredictions.latestKtc.toLocaleString()}`
+                              : `Current: ${upcomingPredictions.latestKtc.toLocaleString()}`,
                           position: "right",
-                          fill: "#8B5CF6",
-                          fontSize: 12,
+                          fill: comparePredictions ? "#10B981" : "#8B5CF6",
+                          fontSize: 11,
                         }}
                       />
-                      {/* Breakeven line */}
-                      {upcomingPredictions?.breakevenFPPerGame && (
+                      {/* Player 2 reference line for KTC (Cyan) - only if comparing */}
+                      {comparePredictions && (
+                        <ReferenceLine
+                          y={comparePredictions.latestKtc}
+                          stroke="#3B82F6"
+                          strokeDasharray="5 5"
+                          strokeWidth={2}
+                          label={{
+                            value: `${comparePredictions.name}: ${comparePredictions.latestKtc.toLocaleString()}`,
+                            position: "left",
+                            fill: "#3B82F6",
+                            fontSize: 11,
+                          }}
+                        />
+                      )}
+                      {/* Breakeven line - only show when not comparing */}
+                      {!comparePredictions && upcomingPredictions?.breakevenFPPerGame && (
                         <ReferenceLine
                           x={upcomingPredictions.breakevenFPPerGame}
                           stroke="#F59E0B"
@@ -871,7 +1144,14 @@ function KtcPredictorContent() {
               </div>
               {upcomingPredictions && (
                 <div className="mt-4 text-center text-gray-500">
-                  {upcomingPredictions.isHistorical &&
+                  {comparePredictions ? (
+                    <p>
+                      <span className="text-green-400">{upcomingPredictions.name}</span>
+                      {" vs "}
+                      <span className="text-blue-400">{comparePredictions.name}</span>
+                      {" | Dashed lines show current KTC"}
+                    </p>
+                  ) : upcomingPredictions.isHistorical &&
                   upcomingPredictions.actualPerformance ? (
                     <p>
                       Purple: Actual (
