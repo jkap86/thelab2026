@@ -363,8 +363,8 @@ export async function GET(req: NextRequest) {
   const projectedGames = gamesParam ? parseInt(gamesParam, 10) : 17;
   const historicalYear = yearParam ? parseInt(yearParam, 10) : null;
 
-  if (isNaN(projectedGames) || projectedGames < 1 || projectedGames > 17) {
-    return NextResponse.json({ error: 'games must be between 1 and 17' }, { status: 400 });
+  if (isNaN(projectedGames) || projectedGames < 0 || projectedGames > 17) {
+    return NextResponse.json({ error: 'games must be between 0 and 17' }, { status: 400 });
   }
 
   try {
