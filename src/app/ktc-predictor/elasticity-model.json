@@ -1,0 +1,207 @@
+{
+  "version": "2.0",
+  "model_type": "elasticity",
+  "description": "Predicts KTC % change based on player features",
+  "xgb_params": {
+    "n_estimators": 447,
+    "max_depth": 7,
+    "learning_rate": 0.023373770349443414,
+    "subsample": 0.606286656465187,
+    "colsample_bytree": 0.7992593759283053,
+    "min_child_weight": 5,
+    "reg_alpha": 0.7573772188483912,
+    "reg_lambda": 2.033888997739477,
+    "random_state": 42,
+    "n_jobs": -1
+  },
+  "lgb_params": {
+    "n_estimators": 242,
+    "max_depth": 10,
+    "learning_rate": 0.015585010211494135,
+    "subsample": 0.7912750949962243,
+    "colsample_bytree": 0.7409903426190736,
+    "min_child_samples": 14,
+    "reg_alpha": 0.0052783418954631175,
+    "reg_lambda": 0.6292433729586222,
+    "random_state": 42,
+    "n_jobs": -1,
+    "verbose": -1
+  },
+  "ensemble_weights": {
+    "xgb": 0.4,
+    "lgb": 0.6
+  },
+  "target_transform": {
+    "formula": "(pct_change + 0.5) / 1.5",
+    "inverse": "normalized * 1.5 - 0.5",
+    "description": "Maps -50% to +100% change onto 0 to 1"
+  },
+  "n_features": 90,
+  "base_features": 80,
+  "elasticity_features": [
+    "young_elasticity",
+    "veteran_decline_elastic",
+    "is_prime_age",
+    "is_decline_age",
+    "elite_downside_elastic",
+    "mid_breakout_elastic",
+    "rb_workload_elastic",
+    "opportunity_elastic",
+    "old_fp_sensitivity",
+    "is_backup_proxy"
+  ],
+  "age_cliffs": {
+    "QB": 35,
+    "RB": 27,
+    "WR": 30,
+    "TE": 30
+  },
+  "metrics": {
+    "mae_pct": 0.1874764789443275,
+    "r2": 0.5836324333609099,
+    "training_samples": 1151,
+    "test_samples": 453
+  },
+  "xgb_config": {
+    "n_estimators": 447,
+    "max_depth": 7,
+    "learning_rate": 0.023373770349443414
+  },
+  "lgb_config": {
+    "n_estimators": 242,
+    "max_depth": 10,
+    "learning_rate": 0.015585010211494135
+  },
+  "feature_importance": [
+    {
+      "index": 0,
+      "name": "base_feature_0",
+      "importance": 0.11715377486842134
+    },
+    {
+      "index": 79,
+      "name": "base_feature_79",
+      "importance": 0.047845738480648214
+    },
+    {
+      "index": 5,
+      "name": "base_feature_5",
+      "importance": 0.04717385468100929
+    },
+    {
+      "index": 7,
+      "name": "base_feature_7",
+      "importance": 0.04132610805384234
+    },
+    {
+      "index": 21,
+      "name": "base_feature_21",
+      "importance": 0.0355724285573284
+    },
+    {
+      "index": 2,
+      "name": "base_feature_2",
+      "importance": 0.03141653019933069
+    },
+    {
+      "index": 9,
+      "name": "base_feature_9",
+      "importance": 0.031052667904062265
+    },
+    {
+      "index": 47,
+      "name": "base_feature_47",
+      "importance": 0.029506442756025444
+    },
+    {
+      "index": 70,
+      "name": "base_feature_70",
+      "importance": 0.027965966656693646
+    },
+    {
+      "index": 36,
+      "name": "base_feature_36",
+      "importance": 0.0251794736431642
+    },
+    {
+      "index": 75,
+      "name": "base_feature_75",
+      "importance": 0.024634532598796055
+    },
+    {
+      "index": 11,
+      "name": "base_feature_11",
+      "importance": 0.022803987371664294
+    },
+    {
+      "index": 8,
+      "name": "base_feature_8",
+      "importance": 0.021902258058890352
+    },
+    {
+      "index": 50,
+      "name": "base_feature_50",
+      "importance": 0.02105425991403954
+    },
+    {
+      "index": 48,
+      "name": "base_feature_48",
+      "importance": 0.018967018676435944
+    },
+    {
+      "index": 1,
+      "name": "base_feature_1",
+      "importance": 0.016779117077006096
+    },
+    {
+      "index": 3,
+      "name": "base_feature_3",
+      "importance": 0.016711419683346742
+    },
+    {
+      "index": 22,
+      "name": "base_feature_22",
+      "importance": 0.016699415356428195
+    },
+    {
+      "index": 4,
+      "name": "base_feature_4",
+      "importance": 0.016414049448114115
+    },
+    {
+      "index": 17,
+      "name": "base_feature_17",
+      "importance": 0.016187682305400797
+    }
+  ],
+  "cohort_stats": {
+    "old": {
+      "mean": 0.08359022773678465,
+      "std": 0.9380540179563749,
+      "min": -0.5736782902137233,
+      "max": 5.584905660377358,
+      "n": 44
+    },
+    "veteran": {
+      "mean": 0.08712803566721271,
+      "std": 0.8446240910996917,
+      "min": -0.8575581395348837,
+      "max": 8.046242774566474,
+      "n": 192
+    },
+    "prime": {
+      "mean": 0.10464044947004793,
+      "std": 0.5299818077330085,
+      "min": -0.8869294605809128,
+      "max": 5.631336405529954,
+      "n": 912
+    },
+    "rookie": {
+      "mean": 0.17112199716718623,
+      "std": 0.9990194688340415,
+      "min": -0.8170426065162907,
+      "max": 17.02158273381295,
+      "n": 456
+    }
+  }
+}

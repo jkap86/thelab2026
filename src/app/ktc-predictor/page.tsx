@@ -157,7 +157,7 @@ function ConfidenceBadge({
   );
 }
 
-// Available years for filtering
+// Available years for filtering (matching PFF-enhanced rolling validation)
 const AVAILABLE_YEARS = [2022, 2023, 2024, 2025] as const;
 
 function KtcPredictorContent() {
@@ -405,7 +405,7 @@ function KtcPredictorContent() {
         KTC Prediction Model
       </h1>
       <p className="text-center mb-2 text-gray-400 text-[1.5rem]">
-        XGBoost Model (39 features) | Rolling Year Validation |{" "}
+        XGBoost + LightGBM Ensemble (111 features) | PFF-Enhanced | Rolling Year Validation |{" "}
         {data.metadata.totalPlayers} players
       </p>
 
