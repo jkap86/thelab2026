@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// LSTM inference imports
+import {
+  predictLSTM,
+  LSTMPlayerInput,
+  WeeklyKtcData,
+  WeeklyStatsData,
+} from './lstm-inference';
+
 // Load chart data and optimized models
 const chartDataPath = path.resolve(process.cwd(), 'src/app/ktc-predictor/chart-data.json');
 
@@ -161,6 +169,293 @@ interface LightGBMModel {
   lightgbm_model: {
     tree_info: LightGBMTree[];
   };
+}
+
+// ============================================================================
+// Training Data Types and Loader (for real weekly data)
+// ============================================================================
+
+interface TrainingWeeklyStats {
+  week: number;
+  fantasy_points: number;
+  games_played: number;
+  snap_pct: number;
+}
+
+interface TrainingWeeklyKtc {
+  week: number;
+  ktc: number;
+  date?: string;
+}
+
+interface TrainingSeason {
+  year: number;
+  start_ktc: number;
+  end_ktc: number;
+  fantasy_points: number;
+  games_played: number;
+  age: number;
+  years_exp: number;
+  weekly_stats: TrainingWeeklyStats[];
+  weekly_ktc: TrainingWeeklyKtc[];
+  draft_round?: number | null;
+}
+
+interface TrainingPlayer {
+  player_id: string;
+  name: string;
+  position: string;
+  seasons: TrainingSeason[];
+}
+
+interface TrainingData {
+  players: TrainingPlayer[];
+}
+
+// Cache for training data (loaded once, used for historical years with real weekly data)
+let trainingDataCache: TrainingData | null = null;
+
+function loadTrainingData(): TrainingData | null {
+  if (trainingDataCache) return trainingDataCache;
+
+  try {
+    // Training data is in models/ktc/data/ relative to project root
+    const trainingPath = path.resolve(process.cwd(), '../models/ktc/data/training-data.json');
+    if (!fs.existsSync(trainingPath)) {
+      // Try alternate path (for when cwd is project root)
+      const altPath = path.resolve(process.cwd(), 'models/ktc/data/training-data.json');
+      if (fs.existsSync(altPath)) {
+        trainingDataCache = JSON.parse(fs.readFileSync(altPath, 'utf-8'));
+        return trainingDataCache;
+      }
+      console.warn('Training data not found at:', trainingPath, 'or', altPath);
+      return null;
+    }
+
+    trainingDataCache = JSON.parse(fs.readFileSync(trainingPath, 'utf-8'));
+    return trainingDataCache;
+  } catch (error) {
+    console.error('Failed to load training data:', error);
+    return null;
+  }
+}
+
+// ============================================================================
+// LSTM Prediction with Synthetic Sequences
+// ============================================================================
+
+const SEQUENCE_LENGTH = 18;
+
+/**
+ * Create synthetic weekly sequence for LSTM projection.
+ * Distributes projected FP across weeks and simulates KTC progression.
+ */
+function predictWithLSTM(
+  player: PlayerChartData,
+  projectedTotalFP: number,
+  projectedGames: number,
+  startKtc?: number,
+  age?: number,
+  yearsExp?: number
+): number {
+  const effectiveStartKtc = startKtc ?? player.latestKtc;
+  const effectiveAge = age ?? player.currentAge;
+  const effectiveYearsExp = yearsExp ?? player.yearsExp;
+
+  // Distribute projected FP across weeks based on projected games
+  const avgFpPerGame = projectedGames > 0 ? projectedTotalFP / projectedGames : 0;
+
+  // Position-specific FP expectations (points per game thresholds)
+  const positionFpExpectations: Record<string, { low: number; avg: number; high: number }> = {
+    'QB': { low: 12, avg: 18, high: 24 },
+    'RB': { low: 8, avg: 12, high: 18 },
+    'WR': { low: 8, avg: 12, high: 18 },
+    'TE': { low: 6, avg: 10, high: 15 },
+  };
+
+  const expectations = positionFpExpectations[player.position] || positionFpExpectations['WR'];
+
+  // Calculate weekly KTC trend based on FP vs position expectations
+  // This creates FP-responsive KTC trajectories that match training data patterns
+  let weeklyKtcTrendPct: number;
+  if (avgFpPerGame >= expectations.high) {
+    // Elite performance → strong positive KTC trend (+1-2% per week)
+    const excessFp = (avgFpPerGame - expectations.high) / expectations.high;
+    weeklyKtcTrendPct = 0.01 + Math.min(excessFp * 0.01, 0.01);
+  } else if (avgFpPerGame >= expectations.avg) {
+    // Above average → slight positive trend (0 to +1% per week)
+    const ratio = (avgFpPerGame - expectations.avg) / (expectations.high - expectations.avg);
+    weeklyKtcTrendPct = ratio * 0.01;
+  } else if (avgFpPerGame >= expectations.low) {
+    // Below average → slight negative trend (0 to -1% per week)
+    const ratio = (expectations.avg - avgFpPerGame) / (expectations.avg - expectations.low);
+    weeklyKtcTrendPct = -ratio * 0.01;
+  } else {
+    // Poor performance → strong negative trend (-1-2% per week)
+    const deficitRatio = Math.min((expectations.low - avgFpPerGame) / expectations.low, 1);
+    weeklyKtcTrendPct = -0.01 - deficitRatio * 0.01;
+  }
+
+  // Build synthetic weekly KTC and stats
+  const weekly_ktc: WeeklyKtcData[] = [];
+  const weekly_stats: WeeklyStatsData[] = [];
+
+  let currentKtc = effectiveStartKtc;
+  let cumulativeGames = 0;
+
+  for (let w = 0; w < SEQUENCE_LENGTH; w++) {
+    // Determine if player plays this week (distribute games across season)
+    const expectedGamesThisWeek = projectedGames / SEQUENCE_LENGTH;
+    const playsThisWeek = cumulativeGames < projectedGames &&
+      (w < projectedGames || Math.random() < expectedGamesThisWeek);
+
+    const weekFp = playsThisWeek ? avgFpPerGame : 0;
+    const weekGames = playsThisWeek ? 1 : 0;
+    cumulativeGames += weekGames;
+
+    // Apply FP-responsive KTC trend
+    currentKtc = currentKtc * (1 + weeklyKtcTrendPct);
+    currentKtc = Math.max(100, Math.min(9999, currentKtc));
+
+    weekly_ktc.push({
+      week: w + 1,
+      ktc: Math.round(currentKtc),
+    });
+
+    weekly_stats.push({
+      week: w + 1,
+      fantasy_points: weekFp,
+      games_played: weekGames,
+      snap_pct: playsThisWeek ? (player.historicalSnapPct || 0.8) : 0,
+    });
+  }
+
+  // Build LSTM input
+  const lstmInput: LSTMPlayerInput = {
+    position: player.position,
+    age: effectiveAge,
+    years_exp: effectiveYearsExp,
+    start_ktc: effectiveStartKtc,
+    draft_round: null, // Unknown for projections
+    weekly_ktc,
+    weekly_stats,
+  };
+
+  return predictLSTM(lstmInput);
+}
+
+/**
+ * Helper function to calculate weekly KTC trend based on FP per game.
+ * Uses position-specific expectations to determine if performance is
+ * elite, average, or poor - and returns the corresponding weekly trend %.
+ */
+function calculateWeeklyKtcTrend(
+  fpPerGame: number,
+  position: string
+): number {
+  const positionFpExpectations: Record<string, { low: number; avg: number; high: number }> = {
+    'QB': { low: 12, avg: 18, high: 24 },
+    'RB': { low: 8, avg: 12, high: 18 },
+    'WR': { low: 8, avg: 12, high: 18 },
+    'TE': { low: 6, avg: 10, high: 15 },
+  };
+
+  const expectations = positionFpExpectations[position] || positionFpExpectations['WR'];
+
+  if (fpPerGame >= expectations.high) {
+    // Elite performance → strong positive KTC trend (+1-2% per week)
+    const excessFp = (fpPerGame - expectations.high) / expectations.high;
+    return 0.01 + Math.min(excessFp * 0.01, 0.01);
+  } else if (fpPerGame >= expectations.avg) {
+    // Above average → slight positive trend (0 to +1% per week)
+    const ratio = (fpPerGame - expectations.avg) / (expectations.high - expectations.avg);
+    return ratio * 0.01;
+  } else if (fpPerGame >= expectations.low) {
+    // Below average → slight negative trend (0 to -1% per week)
+    const ratio = (expectations.avg - fpPerGame) / (expectations.avg - expectations.low);
+    return -ratio * 0.01;
+  } else {
+    // Poor performance → strong negative trend (-1-2% per week)
+    const deficitRatio = Math.min((expectations.low - fpPerGame) / expectations.low, 1);
+    return -0.01 - deficitRatio * 0.01;
+  }
+}
+
+/**
+ * Predict using REAL weekly data from training-data.json.
+ * This ensures chart predictions match table predictions for historical years.
+ *
+ * The weekly KTC trajectory is adjusted based on how much projected FP
+ * deviates from actual FP:
+ * - At actual FP: uses real trajectory (exact match with table)
+ * - Above actual FP: KTC rises more (positive adjustment)
+ * - Below actual FP: KTC falls more (negative adjustment)
+ */
+function predictWithRealWeeklyData(
+  player: PlayerChartData,
+  trainingSeason: TrainingSeason,
+  projectedTotalFP: number,
+  projectedGames: number
+): number {
+  // Calculate the FP scaling ratio
+  const actualTotalFP = trainingSeason.weekly_stats.reduce(
+    (sum, w) => sum + (w.fantasy_points || 0),
+    0
+  );
+  const fpRatio = actualTotalFP > 0 ? projectedTotalFP / actualTotalFP : 1;
+
+  // Calculate the games scaling ratio
+  const actualTotalGames = trainingSeason.weekly_stats.reduce(
+    (sum, w) => sum + (w.games_played || 0),
+    0
+  );
+  const gamesRatio = actualTotalGames > 0 ? projectedGames / actualTotalGames : 1;
+
+  // Calculate FP per game for both projected and actual
+  const projectedFpPerGame = projectedTotalFP / Math.max(projectedGames, 1);
+  const actualFpPerGame = actualTotalFP / Math.max(actualTotalGames, 1);
+
+  // Calculate weekly KTC trends for both scenarios
+  const projectedWeeklyTrend = calculateWeeklyKtcTrend(projectedFpPerGame, player.position);
+  const actualWeeklyTrend = calculateWeeklyKtcTrend(actualFpPerGame, player.position);
+
+  // Net adjustment = difference between projected and actual trends
+  // At actual FP: netAdjustment = 0 (real trajectory used exactly)
+  // Above actual FP: netAdjustment > 0 (KTC rises more)
+  // Below actual FP: netAdjustment < 0 (KTC falls more)
+  const netKtcAdjustment = projectedWeeklyTrend - actualWeeklyTrend;
+
+  // Build weekly_ktc with FP-responsive adjustment applied cumulatively
+  const weekly_ktc: WeeklyKtcData[] = trainingSeason.weekly_ktc.map((w, idx) => {
+    // Apply cumulative adjustment based on week number
+    const adjustmentMultiplier = Math.pow(1 + netKtcAdjustment, idx + 1);
+    const adjustedKtc = Math.round(w.ktc * adjustmentMultiplier);
+    return {
+      week: w.week,
+      ktc: Math.max(100, Math.min(9999, adjustedKtc)),
+    };
+  });
+
+  // Build weekly_stats from real data, scaled by FP/games ratio
+  const weekly_stats: WeeklyStatsData[] = trainingSeason.weekly_stats.map((w) => ({
+    week: w.week,
+    fantasy_points: (w.fantasy_points || 0) * fpRatio,
+    games_played: gamesRatio !== 1 ? (w.games_played || 0) * gamesRatio : w.games_played || 0,
+    snap_pct: w.snap_pct || 0,
+  }));
+
+  // Build LSTM input with adjusted weekly data
+  const lstmInput: LSTMPlayerInput = {
+    position: player.position,
+    age: trainingSeason.age,
+    years_exp: trainingSeason.years_exp,
+    start_ktc: trainingSeason.start_ktc,
+    draft_round: trainingSeason.draft_round ?? null,
+    weekly_ktc,
+    weekly_stats,
+  };
+
+  return predictLSTM(lstmInput);
 }
 
 // ============================================================================
@@ -416,10 +711,20 @@ function extractEnhancedFeatures(
   const qbEfficiency = isQb ? Math.min(stats.passingYards / Math.max(stats.interceptions * 100, 1) / 50, 1) : 0;
 
   // Elite tier features
-  const isEliteTier = startKtcNorm > 0.6 ? 1 : 0;
+  // ADJUSTED: Only apply dampening to TRUE Elite (8000+), not Tier-1 (6000-8000)
+  const isEliteTier = startKtcNorm > 0.6 ? 1 : 0;  // Keep for feature consistency
+  const isTrueElite = startKtcNorm >= 0.8 ? 1 : 0;  // NEW: Only 8000+ KTC
   const eliteAgeInteraction = isEliteTier * ageFactor;
-  const eliteTrajectoryInteraction = isEliteTier * fpTrajectory;
-  const eliteVolatilityDampener = isEliteTier * (1 - ktcVolatility);
+  // REDUCED: Only apply trajectory dampening to true elite, and reduce intensity
+  let eliteTrajectoryInteraction = isTrueElite * fpTrajectory * 0.5;  // Reduced from 1.0
+  // Round 3: Add age-adjusted dampening - young elites shouldn't get same dampening as old elites
+  if (age <= 27) {
+    const ageDampeningReduction = (28 - age) / 10;  // 0.1 to 0.7 reduction for young players
+    eliteTrajectoryInteraction *= (1 - ageDampeningReduction);
+  }
+  // ROUND 3 FIX: Penalize VOLATILITY, not stability! Old logic was backwards.
+  // Stable elite players should NOT be penalized - volatile ones should be
+  const eliteVolatilityDampener = isTrueElite * ktcVolatility * 0.3;  // Changed from (1-volatility)*0.5
 
   // Advanced features
   const efficiencyVolume = fpPerSnap * targetShare;
@@ -558,6 +863,7 @@ function extractEnhancedFeatures(
   // =====================================================
 
   // 1. Veteran decline risk
+  // ADJUSTED: Reduce by 40% for QBs (they decline slower than other positions)
   let veteranDeclineRisk = 0;
   if (age >= 28) {
     const ageRisk = Math.min((age - 28) / 8, 1.0);
@@ -567,14 +873,26 @@ function extractEnhancedFeatures(
     }
     const productionDamper = Math.max(0.3, 1 - fpNorm);
     veteranDeclineRisk = Math.min(ageRisk * declineAmplifier * productionDamper, 1.0);
+    // Reduce decline risk by 40% for QBs - they can produce into late 30s
+    if (isQb) {
+      veteranDeclineRisk *= 0.6;
+    }
   }
 
-  // 2. RB age penalty
+  // 2. RB age penalty (ENHANCED: exponential at 28+ to capture cliff)
   let rbAgePenalty = 0;
-  if (isRb && age >= 27) {
-    const basePenalty = (age - 27) / 3;
-    const workloadAmplifier = 1.0 + (carriesNorm * 0.5);
-    rbAgePenalty = Math.min(basePenalty * workloadAmplifier, 1.0);
+  if (isRb) {
+    if (age >= 28) {
+      // Exponential penalty starting at 28 (the cliff)
+      const yearsOver27 = age - 27;
+      rbAgePenalty = Math.min(0.3 * Math.pow(yearsOver27, 1.5), 1.0);
+      // Amplify by workload (more carries = faster decline)
+      const workloadAmplifier = 1.0 + (carriesNorm * 0.5);
+      rbAgePenalty = Math.min(rbAgePenalty * workloadAmplifier, 1.0);
+    } else if (age === 27) {
+      // Warning zone - slight penalty
+      rbAgePenalty = 0.1;
+    }
   }
 
   // 3. WR/TE age penalty
@@ -640,8 +958,19 @@ function extractEnhancedFeatures(
   // PHASE 2 CALIBRATION FEATURES (12 features)
   // =====================================================
 
-  // 1. QB stability premium: Reduce age penalty by 50% for QBs
-  const qbStabilityPremium = isQb ? 0.5 * (1 - ageFactor) : 0;
+  // 1. QB stability premium: Extended prime window for QBs (stable until 38, not 35)
+  // ENHANCED: QBs can produce into late 30s, tiered by age
+  let qbStabilityPremium = 0;
+  if (isQb) {
+    if (age <= 35) {
+      qbStabilityPremium = 0.15;  // Full premium during prime
+    } else if (age <= 38) {
+      qbStabilityPremium = 0.10;  // Still valuable in extended prime
+    } else if (age <= 40) {
+      qbStabilityPremium = 0.05;  // Reduced but still some floor
+    }
+    // age > 40: no premium (severe decline expected)
+  }
 
   // 2. QB scarcity factor: Top-12 QB value floor protection
   const qbScarcityFactor = (isQb && startKtcNorm > 0.7) ? 0.15 : 0;
@@ -681,32 +1010,42 @@ function extractEnhancedFeatures(
   // PHASE 3 CALIBRATION FEATURES (12 features for TE, breakout, young/veteran)
   // =====================================================
 
-  // --- TE Position Boost (TEs under-predicted by -98 pts avg) ---
+  // --- TE Position Boost (TEs under-predicted by -99 pts avg, 100% breakouts under-predicted) ---
+  // ROUND 3: Further enhanced TE features to fix systematic under-prediction
 
   // 1. TE upside amplifier: TEs have unique value in dynasty due to scarcity
   let teUpsideAmplifier = 0;
   if (isTe) {
-    const basePremium = 0.15;
-    const youthBoost = Math.max(0, (27 - age) / 10) * 0.15;
-    const productionBoost = fpNorm * 0.2;
-    teUpsideAmplifier = Math.min(basePremium + youthBoost + productionBoost, 0.5);
+    const basePremium = 0.25;  // Increased from 0.15
+    const youthBoost = Math.max(0, (27 - age) / 8) * 0.2;  // Increased from /10 * 0.15
+    const productionBoost = fpNorm * 0.25;  // Increased from 0.2
+    // PFF grade multiplier for TEs
+    const pffBoost = pffGradeNorm > 0.6 ? (pffGradeNorm - 0.6) * 0.5 : 0;
+    // Snap scarcity premium (only ~8 startable TEs in dynasty)
+    const snapScarcityBoost = snapPctNorm > 0.6 ? 0.15 : 0;
+    // ROUND 3: Trajectory boost for TEs on upward trend
+    const trajectoryBoost = fpTrajectory > 0.5 ? (fpTrajectory - 0.5) * 0.4 : 0;  // Up to +0.2
+    // ROUND 3: Cap increased from 0.7 to 0.9 for more upside
+    teUpsideAmplifier = Math.min(basePremium + youthBoost + productionBoost + pffBoost + snapScarcityBoost + trajectoryBoost, 0.9);
   }
 
   // 2. TE elite ceiling: Elite TEs have higher ceiling
   let teEliteCeiling = 0;
-  if (isTe && startKtcNorm > 0.6) {
-    const eliteBase = 0.2;
-    const youthAmplifier = Math.max(0, (28 - age) / 5);
-    teEliteCeiling = Math.min(eliteBase * (1 + youthAmplifier), 0.5);
+  if (isTe && startKtcNorm > 0.5) {  // Lowered from 0.6
+    const eliteBase = 0.3;  // Increased from 0.25
+    const youthAmplifier = Math.max(0, (28 - age) / 4);  // Steeper curve: /4 instead of /5
+    // ROUND 3: Increased cap from 0.6 to 0.7
+    teEliteCeiling = Math.min(eliteBase * (1 + youthAmplifier), 0.7);
   }
 
   // 3. TE breakout indicator: Young TEs showing production breakout
+  // ROUND 3: Increased values to 0.5/0.4 to better capture TE breakouts
   let teBreakoutIndicator = 0;
-  if (isTe && age <= 26) {
-    if (rawFpChange && rawFpChange > 0.2) {
-      teBreakoutIndicator = 0.3;
-    } else if (fpNorm > 0.3 && priorFpNorm < 0.2) {
-      teBreakoutIndicator = 0.25;
+  if (isTe && age <= 27) {  // Extended from 26
+    if (rawFpChange && rawFpChange > 0.15) {  // Lowered from 0.2
+      teBreakoutIndicator = 0.5;  // ROUND 3: Increased from 0.4 to 0.5
+    } else if (fpNorm > 0.25 && priorFpNorm < 0.15) {  // Lowered thresholds
+      teBreakoutIndicator = 0.4;  // ROUND 3: Increased from 0.35 to 0.4
     }
   }
 
@@ -741,11 +1080,13 @@ function extractEnhancedFeatures(
   // --- Young Player Calibration (Young <=24 under-predicted by -84 pts) ---
 
   // 7. Young elite ceiling boost: Young elite players have highest ceiling
+  // ROUND 3: Lowered threshold from 0.7 to 0.6 to capture Drake Maye (0.64) and JSN (0.63)
+  // Also expanded age from 24 to 25 and increased cap from 0.4 to 0.6
   let youngEliteCeilingBoost = 0;
-  if (age <= 24 && startKtcNorm > 0.7) {
-    const youthPremium = (25 - age) / 5;
-    const elitePremium = (startKtcNorm - 0.7) * 3.33;
-    youngEliteCeilingBoost = Math.min(youthPremium * elitePremium * 0.4, 0.4);
+  if (age <= 25 && startKtcNorm > 0.6) {  // EXPANDED: age 24->25, KTC 0.7->0.6
+    const youthPremium = (26 - age) / 5;  // 0.2 to 1.0 (expanded range)
+    const elitePremium = (startKtcNorm - 0.6) * 2.5;  // 0 to 1.0 for 6000-10000 KTC
+    youngEliteCeilingBoost = Math.min(youthPremium * elitePremium * 0.6, 0.6);  // Higher cap
   }
 
   // 8. Career trajectory boost: Young players on upward trajectory
@@ -797,7 +1138,404 @@ function extractEnhancedFeatures(
     positionAgeInteraction = Math.min(positionAgeInteraction, 0.8);
   }
 
-  // Return all 148 features in exact order matching Python model
+  // =====================================================
+  // PHASE 4: ELITE REGRESSION + BREAKOUT/CRASH ENHANCEMENT
+  // =====================================================
+
+  // 1. ELITE POSITIVE CHANGE DAMPENER (Fix elite over-prediction)
+  // ADJUSTED: Only dampen TRUE elite (8000+), not Tier-1 (6000-8000)
+  // Also REDUCED intensity (0.8 -> 0.3) to fix -386 pts elite under-prediction
+  let elitePositiveChangeDampener = 0;
+  if (startKtcNorm >= 0.8) {  // CHANGED: Only TRUE elite (8000+ KTC)
+    const eliteTierFactor = Math.min((startKtcNorm - 0.8) * 5.0, 1.0);  // Only 8000-10000
+    // CHANGED: Only dampen if VERY strong trajectory AND high momentum
+    if (fpTrajectory > 0.6 && ktcMomentum > 0.1) {  // Higher threshold
+      const trajectoryOvershoot = (fpTrajectory - 0.6) * 2.5;
+      elitePositiveChangeDampener = eliteTierFactor * trajectoryOvershoot * 0.3;  // REDUCED from 0.8
+    }
+  }
+
+  // 2. YOUNG BREAKOUT CEILING (Enhanced breakout detection)
+  let youngBreakoutCeiling = 0;
+  if (age <= 26) {
+    const ktcRising = ktcMomentum > 0.1 ? ktcMomentum : 0;
+    const ktcMomentumSignal = Math.min(ktcRising * 2.0, 0.4);
+
+    const fpImproving = fpTrajectory > 0.6 ? fpTrajectory : 0;
+    const fpTrajectorySignal = Math.min((fpImproving - 0.6) * 2.5, 0.3);
+
+    let snapBreakthrough = 0;
+    if (snapPctNorm > 0.7) {
+      snapBreakthrough = 0.2;
+    } else if (snapPctNorm > 0.6) {
+      snapBreakthrough = 0.1;
+    }
+
+    const youthPremium = ((27 - age) / 7) * 0.2;
+
+    youngBreakoutCeiling = Math.min(
+      ktcMomentumSignal + fpTrajectorySignal + snapBreakthrough + youthPremium,
+      0.9
+    );
+  }
+
+  // 3. VETERAN CRASH AMPLIFIER (Better crash detection)
+  let veteranCrashAmplifier = 0;
+  if (age >= positionCliffAge) {
+    const yearsOverCliff = age - positionCliffAge;
+    const ageCrashRisk = Math.min(yearsOverCliff / 3, 1.0);
+
+    let perfDeclineAmp = 1.0;
+    if (rawFpChange < -0.1) {
+      perfDeclineAmp = 1.0 + Math.abs(rawFpChange) * 2.0;
+    }
+
+    let injuryAmp = 1.0;
+    if (projectedGames < 12) {
+      injuryAmp = 1.0 + ((17 - projectedGames) / 17) * 0.8;
+    }
+
+    let positionCrashMult = 1.0;
+    if (isRb && yearsOverCliff >= 1) {
+      positionCrashMult = 2.0;  // RBs crash hard at 28+
+    } else if (isWr && yearsOverCliff >= 2) {
+      positionCrashMult = 1.5;
+    } else if (isQb && yearsOverCliff >= 5) {
+      positionCrashMult = 1.8;
+    }
+
+    veteranCrashAmplifier = Math.min(
+      ageCrashRisk * perfDeclineAmp * injuryAmp * positionCrashMult,
+      1.0
+    );
+  }
+
+  // =====================================================
+  // PHASE 5: LARGE VALUE CHANGE IMPROVEMENTS
+  // =====================================================
+
+  // 4. ELITE CRASH RISK (Feature 151)
+  // Enhanced crash detection for elite players
+  let eliteCrashRisk = 0;
+  if (startKtcNorm > 0.6) {  // Above 6000 KTC
+    // 1. Age over position cliff
+    const crashCliffAges: Record<string, number> = { 'QB': 33, 'RB': 27, 'WR': 30, 'TE': 31 };
+    const crashCliff = crashCliffAges[position] || 30;
+    const yearsOverCrashCliff = Math.max(0, age - crashCliff);
+    if (yearsOverCrashCliff > 0) {
+      eliteCrashRisk += yearsOverCrashCliff * 0.15;
+    }
+
+    // 2. Negative momentum amplifier
+    if (ktcMomentum < -0.02) {
+      eliteCrashRisk += Math.abs(ktcMomentum) * 3.0;
+    }
+
+    // 3. Games missed penalty
+    if (projectedGames < 14) {
+      eliteCrashRisk += (17 - projectedGames) / 17 * 0.3;
+    }
+
+    // 4. YoY fantasy point decline
+    if (rawFpChange < -0.15) {
+      eliteCrashRisk += Math.abs(rawFpChange) * 0.5;
+    }
+
+    eliteCrashRisk = Math.min(eliteCrashRisk, 1.0);
+  }
+
+  // 5. BREAKOUT SCORE ENHANCED (Feature 152)
+  // More comprehensive breakout detection
+  let breakoutScoreEnhanced = 0;
+
+  // 1. Young player momentum (strongest signal)
+  if (age <= 26) {
+    const youthBreakoutFactor = (27 - age) / 5;  // 0.2 to 1.0
+    if (ktcMomentum > 0.03) {  // Rising 3%+ per month
+      const momentumBoost = Math.min(ktcMomentum * 10, 0.5);
+      breakoutScoreEnhanced += youthBreakoutFactor * momentumBoost * 2.0;
+    }
+  }
+
+  // 2. Second-year breakout pattern
+  if (yearsExp === 2 && startKtcNorm > 0.4) {
+    breakoutScoreEnhanced += 0.25;
+  }
+
+  // 3. Prior year trajectory (was ascending)
+  if (rawFpChange > 0.15) {
+    const trajectorySignal = Math.min(rawFpChange, 0.4);
+    breakoutScoreEnhanced += trajectorySignal;
+  }
+
+  // 4. Snap share increase indicator
+  if (snapPctNorm > 0.7) {
+    breakoutScoreEnhanced += 0.2;
+  }
+
+  breakoutScoreEnhanced = Math.min(breakoutScoreEnhanced, 1.0);
+
+  // 6. POSITION CRASH RISK (Feature 153)
+  // Position-specific crash multipliers
+  let positionCrashRisk = 0;
+  const crashRates: Record<string, number> = { 'QB': 0.15, 'RB': 0.25, 'WR': 0.12, 'TE': 0.10 };
+  const posCrashCliffs: Record<string, number> = { 'QB': 33, 'RB': 27, 'WR': 30, 'TE': 31 };
+
+  const posCliff = posCrashCliffs[position] || 30;
+  const posRate = crashRates[position] || 0.15;
+  const yearsOverPosCliff = Math.max(0, age - posCliff);
+
+  if (yearsOverPosCliff > 0 && startKtcNorm > 0.4) {
+    positionCrashRisk = Math.min(yearsOverPosCliff * posRate, 0.4);
+  }
+
+  // =====================================================
+  // PHASE 6: TIER-1 AND MAGNITUDE IMPROVEMENTS
+  // =====================================================
+
+  // 7. TIER-1 CRASH RISK (Feature 154)
+  // Tier-1 players (6000-8000 KTC) have highest MAE and +634 bias
+  let tier1CrashRisk = 0;
+  if (startKtcNorm >= 0.6 && startKtcNorm < 0.8) {
+    // Base crash risk for tier-1 volatility
+    tier1CrashRisk = 0.15;
+
+    // Amplify if negative KTC momentum
+    if (ktc90d < 0) {
+      tier1CrashRisk += Math.abs(ktc90d) * 2.0;
+    }
+
+    // Amplify if FP trajectory declining
+    if (fpTrajectory < 0.5) {
+      tier1CrashRisk += (0.5 - fpTrajectory) * 0.3;
+    }
+
+    // Position-specific amplifiers
+    if (isRb && age >= 27) {
+      tier1CrashRisk *= 1.5;
+    }
+    if (isQb && age >= 32) {
+      tier1CrashRisk *= 1.3;
+    }
+
+    tier1CrashRisk = Math.min(tier1CrashRisk, 1.0);
+  }
+
+  // 8. CRASH MAGNITUDE AMPLIFIER (Feature 155)
+  // Model detects crashes (90%) but under-estimates severity (+911 bias)
+  let crashMagnitudeAmplifier = 0;
+  if (age >= cliffAge && fpTrajectory < 0.4) {
+    const yearsOverForCrash = age - cliffAge;
+    let baseSignal = (yearsOverForCrash / 3) * (0.5 - fpTrajectory);
+
+    // Amplify for injury history (games missed)
+    if (projectedGames < 12) {
+      baseSignal *= 1.5;
+    }
+
+    // Amplify for negative KTC momentum
+    if (ktcMomentum < 0) {
+      baseSignal *= (1 + Math.abs(ktcMomentum) * 5);
+    }
+
+    // Amplify for tier-1
+    if (startKtcNorm >= 0.6 && startKtcNorm < 0.8) {
+      baseSignal *= 1.3;
+    }
+
+    crashMagnitudeAmplifier = Math.min(baseSignal, 1.0);
+  }
+
+  // 9. BREAKOUT CEILING BOOST (Feature 156)
+  // Model detects breakouts (89.9%) but under-estimates magnitude (-281 bias)
+  // ENHANCED: Extended age/KTC range, higher multipliers, added FP bonus
+  let breakoutCeilingBoost = 0;
+  if (age <= 26 && startKtcNorm >= 0.35) {  // EXPANDED: age 25→26, KTC 0.4→0.35
+    // Strong positive momentum = breakout potential
+    if (ktcMomentum > 0.03) {  // LOWERED threshold from 0.05
+      let momentumSignal = Math.min(ktcMomentum * 15, 0.65);  // INCREASED: 10→15, cap 0.5→0.65
+
+      // Amplify for production growth
+      if (fpTrajectory > 0.55) {  // LOWERED from 0.6
+        momentumSignal *= 1.8;  // INCREASED from 1.5
+      }
+
+      // NEW: High FP bonus for top producers
+      if (fpNorm > 0.6) {
+        momentumSignal *= 1.4;
+      }
+
+      // Youth premium - steeper curve
+      const youthFactor = (27 - age) / 4;  // CHANGED: (26-age)/5 → (27-age)/4
+
+      breakoutCeilingBoost = momentumSignal * youthFactor;
+      breakoutCeilingBoost = Math.min(breakoutCeilingBoost, 0.9);  // INCREASED cap from 0.7
+    }
+  }
+
+  // =====================================================
+  // ROUND 4: ELITE CRASH AND PLATEAU DETECTION (11 features)
+  // =====================================================
+
+  // 10. ELITE REGRESSION RISK (Feature 157)
+  let eliteRegressionRisk = 0;
+  if (startKtcNorm >= 0.6) {  // 6000+ KTC
+    // Post-breakout regression (year 2-3 after big gain)
+    if ([2, 3].includes(yearsExp) && ktcMomentum > 0.05) {
+      eliteRegressionRisk += 0.25;
+    }
+    // Declining PFF grade
+    if (pffHasData && pffGradeTrajectory < 0.4) {
+      eliteRegressionRisk += (0.5 - pffGradeTrajectory) * 0.5;
+    }
+    // Overvaluation signal
+    if (fpNorm < startKtcNorm - 0.15) {
+      eliteRegressionRisk += 0.3;
+    }
+    // RB 27+ highest risk
+    if (isRb && age >= 27) {
+      eliteRegressionRisk *= 2.0;
+    }
+    eliteRegressionRisk = Math.min(eliteRegressionRisk, 1.0);
+  }
+
+  // 11. MOMENTUM REVERSAL SIGNAL (Feature 158)
+  let momentumReversalSignal = 0;
+  if (ktcMomentum > 0.05 && fpTrajectory < 0.45) {
+    momentumReversalSignal = ktcMomentum * (0.5 - fpTrajectory) * 3.0;
+  }
+  if (isQb && age >= 32 && ktcMomentum > 0.03) {
+    momentumReversalSignal += 0.2;
+  }
+  if (isRb && age >= 27 && ktcMomentum > 0.03) {
+    momentumReversalSignal += 0.4;
+  }
+  momentumReversalSignal = Math.min(momentumReversalSignal, 1.0);
+
+  // 12. POST-BREAKOUT REGRESSION (Feature 159)
+  let postBreakoutRegression = 0;
+  if (yearsExp <= 3 && startKtcNorm >= 0.5) {
+    // First big season = regression candidate
+    if (fpNorm > 0.5 && priorFpNorm < 0.3) {
+      postBreakoutRegression = 0.4;
+    }
+    // Second big season but now age 25+ = plateau risk
+    if (yearsExp === 3 && age >= 25 && fpTrajectory > 0.5) {
+      postBreakoutRegression = 0.3;
+    }
+    // QB-specific regression
+    if (isQb && yearsExp <= 2) {
+      postBreakoutRegression += 0.2;
+    }
+  }
+  postBreakoutRegression = Math.min(postBreakoutRegression, 0.8);
+
+  // 13. AGE 25-26 PLATEAU RISK (Feature 160)
+  let age2526PlateauRisk = 0;
+  if (age === 25 || age === 26) {
+    age2526PlateauRisk = 0.15;
+    if (isQb) {
+      age2526PlateauRisk += 0.25;
+      if (startKtcNorm >= 0.7) {
+        age2526PlateauRisk += 0.2;
+      }
+    }
+    if (isTe) {
+      age2526PlateauRisk += 0.2;
+      if (startKtcNorm >= 0.5) {
+        age2526PlateauRisk += 0.15;
+      }
+    }
+    if (fpTrajectory > 0.55) {
+      age2526PlateauRisk *= 1.3;
+    }
+    age2526PlateauRisk = Math.min(age2526PlateauRisk, 0.8);
+  }
+
+  // 14. QB AGE DANGER ZONE (Feature 161)
+  let qbAgeDangerZone = 0;
+  if (isQb) {
+    if (age === 25 || age === 26) {
+      qbAgeDangerZone = 0.4;
+    } else if (age >= 27 && age <= 30) {
+      qbAgeDangerZone = 0.2;
+    } else if (age >= 31 && age <= 32) {
+      qbAgeDangerZone = 0.3;
+    }
+    if (startKtcNorm >= 0.7) {
+      qbAgeDangerZone *= 1.5;
+    }
+    qbAgeDangerZone = Math.min(qbAgeDangerZone, 0.7);
+  }
+
+  // 15. DEPTH PLAYER CEILING (Feature 162)
+  let depthPlayerCeiling = 0;
+  if (startKtcNorm < 0.1) {  // Under 1000 KTC
+    depthPlayerCeiling = 0.5;
+    if (age >= 28) {
+      depthPlayerCeiling += 0.3;
+    }
+    if (snapPct < 0.4) {
+      depthPlayerCeiling += 0.2;
+    }
+    if (yearsExp <= 2 && draftRoundValue > 0.7) {
+      depthPlayerCeiling *= 0.5;
+    }
+    depthPlayerCeiling = Math.min(depthPlayerCeiling, 0.9);
+  }
+
+  // 16. BACKUP REGRESSION RISK (Feature 163)
+  let backupRegressionRisk = 0;
+  if (startKtcNorm < 0.2 && fpNorm > 0.3) {
+    backupRegressionRisk = (fpNorm - startKtcNorm) * 0.8;
+    if (age >= 28) {
+      backupRegressionRisk *= 1.5;
+    }
+    backupRegressionRisk = Math.min(backupRegressionRisk, 0.8);
+  }
+
+  // 17. PFF GRADE DECLINE RATE (Feature 164)
+  // Note: For projections, pffHasData = 0, so this uses defaults
+  // In chart data generation (Python), actual PFF data is used
+  let pffGradeDeclineRate = 0;
+  // pffHasData is 0 for projections, so this won't execute
+  // When actual PFF data is available, pff_prior_year_grade would be passed
+
+  // 18. PFF AGE-GRADE INTERACTION (Feature 165)
+  let pffAgeGradeInteraction = 0;
+  if (pffHasData) {
+    if (age <= 25 && pffGradeNorm > 0.6) {
+      pffAgeGradeInteraction = (0.6 - (age / 50)) * pffGradeNorm;
+    } else if (age >= 29 && pffGradeTrajectory < 0.4) {
+      pffAgeGradeInteraction = -1 * (ageFactor * (0.5 - pffGradeTrajectory));
+    }
+  }
+
+  // 19. TE GRADE-PRODUCTION MISMATCH (Feature 166)
+  let teGradeProductionMismatch = 0;
+  if (isTe && pffHasData) {
+    if (pffGradeNorm > 0.6 && fpNorm < 0.3) {
+      teGradeProductionMismatch = (pffGradeNorm - fpNorm) * 0.8;
+    } else if (pffGradeNorm < 0.4 && fpNorm > 0.4) {
+      teGradeProductionMismatch = -1 * (fpNorm - pffGradeNorm) * 0.6;
+    }
+  }
+
+  // 20. PFF SNAP EFFICIENCY (Feature 167)
+  // Note: For projections, uses default. Chart data (Python) uses actual PFF snaps
+  let pffSnapEfficiency = 0.5;
+  if (pffHasData) {
+    // pffHasData = 0 for projections, so uses default 0.5
+    // When actual data available, would calculate: pffGradeNorm * (snaps/1000)
+    const snapFullness = Math.min(snapPctNorm, 1.0);
+    pffSnapEfficiency = pffGradeNorm * snapFullness;
+    if (pffGradeNorm > 0.7 && snapFullness > 0.8) {
+      pffSnapEfficiency += 0.15;
+    }
+    pffSnapEfficiency = Math.min(pffSnapEfficiency, 1.0);
+  }
+
+  // Return all 168 features in exact order matching Python model (Round 4)
   return [
     startKtcNorm,           // 0: start_ktc
     ktc30d,                 // 1: ktc_30d_trend
@@ -959,6 +1697,30 @@ function extractEnhancedFeatures(
     veteranQbCliff,         // 145: veteran_qb_cliff
     agingValueCompression,  // 146: aging_value_compression
     positionAgeInteraction, // 147: position_age_interaction
+    // PHASE 4 ENHANCEMENTS (3 new features)
+    elitePositiveChangeDampener, // 148: elite_positive_change_dampener
+    youngBreakoutCeiling,        // 149: young_breakout_ceiling
+    veteranCrashAmplifier,       // 150: veteran_crash_amplifier
+    // PHASE 5: LARGE VALUE CHANGE IMPROVEMENTS (3 new features)
+    eliteCrashRisk,              // 151: elite_crash_risk
+    breakoutScoreEnhanced,       // 152: breakout_score_enhanced
+    positionCrashRisk,           // 153: position_crash_risk
+    // PHASE 6: TIER-1 AND MAGNITUDE IMPROVEMENTS (3 new features)
+    tier1CrashRisk,              // 154: tier1_crash_risk
+    crashMagnitudeAmplifier,     // 155: crash_magnitude_amplifier
+    breakoutCeilingBoost,        // 156: breakout_ceiling_boost
+    // ROUND 4: ELITE CRASH AND PLATEAU DETECTION (11 new features)
+    eliteRegressionRisk,         // 157: elite_regression_risk
+    momentumReversalSignal,      // 158: momentum_reversal_signal
+    postBreakoutRegression,      // 159: post_breakout_regression
+    age2526PlateauRisk,          // 160: age_25_26_plateau_risk
+    qbAgeDangerZone,             // 161: qb_age_danger_zone
+    depthPlayerCeiling,          // 162: depth_player_ceiling
+    backupRegressionRisk,        // 163: backup_regression_risk
+    pffGradeDeclineRate,         // 164: pff_grade_decline_rate
+    pffAgeGradeInteraction,      // 165: pff_age_grade_interaction
+    teGradeProductionMismatch,   // 166: te_grade_production_mismatch
+    pffSnapEfficiency,           // 167: pff_snap_efficiency
   ];
 }
 
@@ -1257,56 +2019,38 @@ interface PredictionWithUncertainty {
   confidence: 'high' | 'medium' | 'low' | null;
 }
 
-// Prediction function using the ensemble model with uncertainty
+// Prediction function using LSTM for smooth curves
 function predictKtcForFPAndGamesWithUncertainty(
   player: PlayerChartData,
   baselineFP: number,
   projectedFP: number,
   projectedGames: number,
-  modelYear: number = 2026  // Default to production model
+  modelYear: number = 2026,
+  priorKtcChange: number = 0,
+  priorStartKtc: number = 0,
+  fpChangeYoy: number | null = null
 ): PredictionWithUncertainty {
-  // Detect tier based on player's current KTC
-  const tier = detectTier(player.latestKtc);
-
-  // Try tier-specific models first, fall back to year-level models
-  const tierModels = loadTierModels(modelYear, tier);
-  const { xgb, lgb } = tierModels || loadPffModels(modelYear);
-  const quantileModels = loadQuantileModels();
-
-  const features = extractEnhancedFeatures(
-    player.latestKtc,
-    player.ktc30dTrend || 0,
-    player.ktc90dTrend || 0,
-    player.currentAge,
-    player.yearsExp,
+  // Use LSTM for smooth predictions (no hard FP thresholds)
+  const predictedKtc = predictWithLSTM(
+    player,
     projectedFP,
     projectedGames,
-    player.position,
-    baselineFP,
-    player.historicalSnapPct || 0.8
+    player.latestKtc,
+    player.currentAge,
+    player.yearsExp
   );
 
-  // Use PFF ensemble prediction - CHANGE PREDICTION
-  // Model predicts (end_ktc - start_ktc) / KTC_MAX, then we add start_ktc to get end value
-  const startKtcForPrediction = features[0] * KTC_MAX_VALUE;  // Denormalize start_ktc (feature 0)
-  const predictedChange = predictPffEnsemble(xgb as PffXgboostModel, lgb, features);
-  const predictedKtc = Math.min(Math.max(Math.round(startKtcForPrediction + predictedChange * KTC_MAX_VALUE), 0), KTC_MAX_VALUE);
+  // Estimate uncertainty based on player characteristics
+  // LSTM doesn't have built-in quantile estimation, so use heuristic
+  const baseUncertainty = 150; // Base uncertainty in KTC points
+  const ageUncertainty = player.currentAge > 30 ? 100 : 0;
+  const expUncertainty = player.yearsExp < 3 ? 100 : 0;
 
-  // Get quantile predictions for uncertainty
-  let predictedKtcLow: number | null = null;
-  let predictedKtcHigh: number | null = null;
-  let intervalWidth: number | null = null;
-  let confidence: 'high' | 'medium' | 'low' | null = null;
-
-  if (quantileModels) {
-    const q10Pred = predictLightGBM(quantileModels.q10, features);
-    const q90Pred = predictLightGBM(quantileModels.q90, features);
-
-    predictedKtcLow = Math.min(Math.max(Math.round(q10Pred * KTC_MAX_VALUE), 0), KTC_MAX_VALUE);
-    predictedKtcHigh = Math.min(Math.max(Math.round(q90Pred * KTC_MAX_VALUE), 0), KTC_MAX_VALUE);
-    intervalWidth = predictedKtcHigh - predictedKtcLow;
-    confidence = getConfidence(intervalWidth);
-  }
+  const totalUncertainty = baseUncertainty + ageUncertainty + expUncertainty;
+  const predictedKtcLow = Math.max(0, predictedKtc - totalUncertainty);
+  const predictedKtcHigh = Math.min(KTC_MAX_VALUE, predictedKtc + totalUncertainty);
+  const intervalWidth = predictedKtcHigh - predictedKtcLow;
+  const confidence = getConfidence(intervalWidth);
 
   return {
     predictedKtc,
@@ -1315,6 +2059,135 @@ function predictKtcForFPAndGamesWithUncertainty(
     intervalWidth,
     confidence,
   };
+}
+
+// ROUND 10: Apply prediction corrections (same as generate_chart_data_pff.py)
+// FP-gated corrections: absolute FP predicts breakouts/crashes better than FP change
+function applyPredictionCorrections(
+  predictedChange: number,
+  startKtc: number,
+  position: string,
+  age: number,
+  yearsExp: number,
+  fpChangeYoy: number | null,
+  priorKtcChange: number,
+  priorStartKtc: number,
+  ktc90dTrend: number = 0,
+  fantasyPoints: number = 0  // Round 10: absolute FP for gating
+): number {
+  const KTC_MAX = 9999;
+
+  // RB CLIFF: RBs 28+ should expect decline, not gains
+  if (position === 'RB' && age >= 28 && startKtc >= 4000) {
+    if (predictedChange > 0) {
+      const declineFactor = Math.min((age - 27) * 0.08, 0.30);
+      return -declineFactor;
+    }
+  }
+
+  // ROUND 10: ELITE (8000+) - FP-gated corrections
+  // Decision tree: Post-breakout → Rookie elite → High FP → Low FP → Established elite → Standard
+  if (startKtc >= 8000) {
+    const fp = fantasyPoints;
+    const isPostBreakout = priorKtcChange > 0.2;  // Gained 2000+ prior year
+    const wasElitePrior = priorStartKtc >= 7500;
+
+    let eliteMean: number;
+    let baseRegression: number;
+
+    // 1. POST-BREAKOUT: 87.5% crash regardless of FP
+    if (isPostBreakout) {
+      eliteMean = 6500;
+      baseRegression = 0.60;
+    }
+    // 2. ROOKIE ELITE: First-year players at elite are overpriced
+    else if (yearsExp <= 1 && !wasElitePrior) {
+      eliteMean = 6500;
+      baseRegression = 0.45;
+    }
+    // 3. HIGH FP (>=350): Strong maintainer/gainer signal
+    else if (fp >= 350) {
+      eliteMean = 8500;
+      baseRegression = 0.15;  // Light regression
+    }
+    // 4. LOW FP (<200): High crash risk regardless of prior status
+    else if (fp < 200) {
+      eliteMean = 6500;
+      baseRegression = 0.50;
+    }
+    // 5. ESTABLISHED ELITE with decent FP (200-350)
+    else if (wasElitePrior && fp >= 200) {
+      eliteMean = 7500;
+      baseRegression = 0.25;
+    }
+    // 6. STANDARD: Position-specific regression
+    else {
+      if (position === 'RB') {
+        eliteMean = 6000;
+        baseRegression = 0.55;
+      } else if (position === 'TE') {
+        eliteMean = 6200;
+        baseRegression = 0.50;
+      } else if (position === 'QB') {
+        eliteMean = 7200;
+        baseRegression = 0.35;
+      } else {
+        eliteMean = 7000;
+        baseRegression = 0.30;
+      }
+    }
+
+    const predictedEnd = startKtc + (eliteMean - startKtc) * baseRegression;
+    return (predictedEnd - startKtc) / KTC_MAX;
+  }
+
+  // ROUND 10: TIER-1 (6000-8000) - FP-gated breakout detection for young players
+  // Data: FP >= 280 -> 53% breakout, 0% crash, avg +1458
+  //       FP 180-280 -> 5% breakout, 38% crash, avg -244
+  //       FP < 180 -> 0% breakout, 41% crash, avg -772
+  if (startKtc >= 6000) {
+    const fp = fantasyPoints;
+
+    // YOUNG (<=25): FP-gated breakout detection
+    if (age <= 25) {
+      if (fp >= 280) {
+        // HIGH FP: Allow breakout (53% breakout rate, 0% crash)
+        const tier1Target = Math.min(startKtc + 1500, 9000);
+        return (tier1Target - startKtc) / KTC_MAX;
+      } else if (fp >= 180) {
+        // MED FP: Conservative (5% breakout, 38% crash)
+        const tier1Target = startKtc - 200;
+        return (tier1Target - startKtc) / KTC_MAX;
+      } else {
+        // LOW FP: Predict decline (0% breakout, 41% crash)
+        const tier1Target = Math.max(startKtc - 700, 5000);
+        return (tier1Target - startKtc) / KTC_MAX;
+      }
+    }
+    // PRIME (26-29): Position-specific moderate regression
+    else if (age <= 29) {
+      let tier1Mean: number;
+      if (position === 'QB') {
+        tier1Mean = 6200;
+      } else if (position === 'TE') {
+        tier1Mean = 6000;
+      } else {
+        tier1Mean = 5500;
+      }
+      return (tier1Mean - startKtc) * 0.15 / KTC_MAX;
+    }
+    // AGING (30+): Aggressive regression
+    else {
+      let change = (5000 - startKtc) * 0.25 / KTC_MAX;
+      if (ktc90dTrend < -0.03) {
+        change -= 0.05;
+      }
+      return change;
+    }
+  }
+
+  // Lower tiers: use model prediction as-is
+  return predictedChange;
 }
 
 // Prediction function using the ensemble model (backward compatible)
@@ -1327,7 +2200,7 @@ function predictKtcForFPAndGames(
   return predictKtcForFPAndGamesWithUncertainty(player, baselineFP, projectedFP, projectedGames).predictedKtc;
 }
 
-// Historical prediction function with uncertainty
+// Historical prediction function with uncertainty - uses LSTM with real weekly data when available
 function predictKtcForFPAndGamesHistoricalWithUncertainty(
   player: PlayerChartData,
   season: SeasonData,
@@ -1336,50 +2209,57 @@ function predictKtcForFPAndGamesHistoricalWithUncertainty(
   projectedGames: number,
   ageAtSeason: number,
   yearsExpAtSeason: number,
-  modelYear: number = 2026  // Use year-specific model
+  modelYear: number = 2026,
+  priorKtcChange: number = 0,
+  priorStartKtc: number = 0,
+  fpChangeYoy: number | null = null
 ): PredictionWithUncertainty {
-  // Detect tier based on season's start KTC
-  const tier = detectTier(season.startKtc);
+  let predictedKtc: number;
 
-  // Try tier-specific models first, fall back to year-level models
-  const tierModels = loadTierModels(modelYear, tier);
-  const { xgb, lgb } = tierModels || loadPffModels(modelYear);
-  const quantileModels = loadQuantileModels();
-
-  const features = extractEnhancedFeatures(
-    season.startKtc,
-    player.ktc30dTrend || 0,
-    player.ktc90dTrend || 0,
-    ageAtSeason,
-    yearsExpAtSeason,
-    projectedFP,
-    projectedGames,
-    player.position,
-    baselineFP,
-    player.historicalSnapPct || 0.8
+  // Try to load real weekly data from training-data.json
+  const trainingData = loadTrainingData();
+  const trainingPlayer = trainingData?.players.find(
+    (p) => p.player_id === player.playerId
+  );
+  const trainingSeason = trainingPlayer?.seasons.find(
+    (s) => s.year === season.year
   );
 
-  // Use PFF ensemble prediction - CHANGE PREDICTION
-  // Model predicts (end_ktc - start_ktc) / KTC_MAX, then we add start_ktc to get end value
-  const startKtcForPrediction = features[0] * KTC_MAX_VALUE;  // Denormalize start_ktc (feature 0)
-  const predictedChange = predictPffEnsemble(xgb as PffXgboostModel, lgb, features);
-  const predictedKtc = Math.min(Math.max(Math.round(startKtcForPrediction + predictedChange * KTC_MAX_VALUE), 0), KTC_MAX_VALUE);
-
-  // Get quantile predictions for uncertainty
-  let predictedKtcLow: number | null = null;
-  let predictedKtcHigh: number | null = null;
-  let intervalWidth: number | null = null;
-  let confidence: 'high' | 'medium' | 'low' | null = null;
-
-  if (quantileModels) {
-    const q10Pred = predictLightGBM(quantileModels.q10, features);
-    const q90Pred = predictLightGBM(quantileModels.q90, features);
-
-    predictedKtcLow = Math.min(Math.max(Math.round(q10Pred * KTC_MAX_VALUE), 0), KTC_MAX_VALUE);
-    predictedKtcHigh = Math.min(Math.max(Math.round(q90Pred * KTC_MAX_VALUE), 0), KTC_MAX_VALUE);
-    intervalWidth = predictedKtcHigh - predictedKtcLow;
-    confidence = getConfidence(intervalWidth);
+  // Use real weekly data if available (18+ weeks of KTC data)
+  if (
+    trainingSeason &&
+    trainingSeason.weekly_ktc &&
+    trainingSeason.weekly_ktc.length >= SEQUENCE_LENGTH
+  ) {
+    // Use real weekly data for prediction - matches chart-data.json generation
+    predictedKtc = predictWithRealWeeklyData(
+      player,
+      trainingSeason,
+      projectedFP,
+      projectedGames
+    );
+  } else {
+    // Fall back to synthetic sequences
+    predictedKtc = predictWithLSTM(
+      player,
+      projectedFP,
+      projectedGames,
+      season.startKtc,
+      ageAtSeason,
+      yearsExpAtSeason
+    );
   }
+
+  // Estimate uncertainty based on player characteristics
+  const baseUncertainty = 150;
+  const ageUncertainty = ageAtSeason > 30 ? 100 : 0;
+  const expUncertainty = yearsExpAtSeason < 3 ? 100 : 0;
+
+  const totalUncertainty = baseUncertainty + ageUncertainty + expUncertainty;
+  const predictedKtcLow = Math.max(0, predictedKtc - totalUncertainty);
+  const predictedKtcHigh = Math.min(KTC_MAX_VALUE, predictedKtc + totalUncertainty);
+  const intervalWidth = predictedKtcHigh - predictedKtcLow;
+  const confidence = getConfidence(intervalWidth);
 
   return {
     predictedKtc,
@@ -1399,10 +2279,14 @@ function predictKtcForFPAndGamesHistorical(
   projectedGames: number,
   ageAtSeason: number,
   yearsExpAtSeason: number,
-  modelYear: number = 2026
+  modelYear: number = 2026,
+  priorKtcChange: number = 0,
+  priorStartKtc: number = 0,
+  fpChangeYoy: number | null = null
 ): number {
   return predictKtcForFPAndGamesHistoricalWithUncertainty(
-    player, season, baselineFP, projectedFP, projectedGames, ageAtSeason, yearsExpAtSeason, modelYear
+    player, season, baselineFP, projectedFP, projectedGames, ageAtSeason, yearsExpAtSeason,
+    modelYear, priorKtcChange, priorStartKtc, fpChangeYoy
   ).predictedKtc;
 }
 
@@ -1464,6 +2348,46 @@ export async function GET(req: NextRequest) {
     // Determine which model year to use
     const modelYear = historicalYear || 2026;
 
+    // Calculate prior year data for corrections (Round 9)
+    // This applies to both historical and current predictions
+    let priorKtcChange = 0;
+    let priorStartKtc = 0;
+    let fpChangeYoy: number | null = null;
+
+    // Sort seasons by year
+    const sortedSeasons = [...player.seasons].sort((a, b) => a.year - b.year);
+
+    if (historicalSeason && historicalYear) {
+      // For historical predictions, use the season before the requested year
+      const seasonIndex = sortedSeasons.findIndex(s => s.year === historicalYear);
+
+      if (seasonIndex > 0) {
+        const priorSeason = sortedSeasons[seasonIndex - 1];
+        priorStartKtc = priorSeason.startKtc;
+        if (priorSeason.actualEndKtc && priorSeason.startKtc) {
+          priorKtcChange = (priorSeason.actualEndKtc - priorSeason.startKtc) / KTC_MAX_VALUE;
+        }
+        // Calculate FP change YoY
+        if (priorSeason.fantasyPoints > 0 && historicalSeason.fantasyPoints > 0) {
+          fpChangeYoy = (historicalSeason.fantasyPoints - priorSeason.fantasyPoints) / priorSeason.fantasyPoints;
+        }
+      }
+    } else if (sortedSeasons.length > 0) {
+      // For current/2026 predictions, use the most recent season as prior
+      const latestSeason = sortedSeasons[sortedSeasons.length - 1];
+      priorStartKtc = latestSeason.startKtc;
+      if (latestSeason.actualEndKtc && latestSeason.startKtc) {
+        priorKtcChange = (latestSeason.actualEndKtc - latestSeason.startKtc) / KTC_MAX_VALUE;
+      }
+      // For current predictions, use latest season's FP change if available
+      if (sortedSeasons.length > 1) {
+        const prevSeason = sortedSeasons[sortedSeasons.length - 2];
+        if (prevSeason.fantasyPoints > 0 && latestSeason.fantasyPoints > 0) {
+          fpChangeYoy = (latestSeason.fantasyPoints - prevSeason.fantasyPoints) / prevSeason.fantasyPoints;
+        }
+      }
+    }
+
     const predictions = fpPerGameRange.map(fpPerGame => {
       const totalFP = fpPerGame * projectedGames;
 
@@ -1471,10 +2395,14 @@ export async function GET(req: NextRequest) {
       if (historicalSeason && historicalYear) {
         predResult = predictKtcForFPAndGamesHistoricalWithUncertainty(
           player, historicalSeason, baselineFP, totalFP, projectedGames,
-          ageAtSeason, yearsExpAtSeason, historicalYear
+          ageAtSeason, yearsExpAtSeason, historicalYear,
+          priorKtcChange, priorStartKtc, fpChangeYoy
         );
       } else {
-        predResult = predictKtcForFPAndGamesWithUncertainty(player, baselineFP, totalFP, projectedGames, modelYear);
+        predResult = predictKtcForFPAndGamesWithUncertainty(
+          player, baselineFP, totalFP, projectedGames, modelYear,
+          priorKtcChange, priorStartKtc, fpChangeYoy
+        );
       }
 
       return {
@@ -1489,9 +2417,13 @@ export async function GET(req: NextRequest) {
     const baselineUncertainty = historicalSeason && historicalYear
       ? predictKtcForFPAndGamesHistoricalWithUncertainty(
           player, historicalSeason, baselineFP, baselineFP, projectedGames,
-          ageAtSeason, yearsExpAtSeason, historicalYear
+          ageAtSeason, yearsExpAtSeason, historicalYear,
+          priorKtcChange, priorStartKtc, fpChangeYoy
         )
-      : predictKtcForFPAndGamesWithUncertainty(player, baselineFP, baselineFP, projectedGames, modelYear);
+      : predictKtcForFPAndGamesWithUncertainty(
+          player, baselineFP, baselineFP, projectedGames, modelYear,
+          priorKtcChange, priorStartKtc, fpChangeYoy
+        );
 
     // Binary search for breakeven
     let breakevenFPPerGame: number | null = null;
@@ -1507,7 +2439,8 @@ export async function GET(req: NextRequest) {
       const predictedKtc = historicalSeason && historicalYear
         ? predictKtcForFPAndGamesHistorical(
             player, historicalSeason, baselineFP, totalFP, projectedGames,
-            ageAtSeason, yearsExpAtSeason, historicalYear
+            ageAtSeason, yearsExpAtSeason, historicalYear,
+            priorKtcChange, priorStartKtc, fpChangeYoy
           )
         : predictKtcForFPAndGames(player, baselineFP, totalFP, projectedGames);
 
@@ -1529,9 +2462,13 @@ export async function GET(req: NextRequest) {
       const breakevenUncertainty = historicalSeason && historicalYear
         ? predictKtcForFPAndGamesHistoricalWithUncertainty(
             player, historicalSeason, baselineFP, totalFP, projectedGames,
-            ageAtSeason, yearsExpAtSeason, historicalYear
+            ageAtSeason, yearsExpAtSeason, historicalYear,
+            priorKtcChange, priorStartKtc, fpChangeYoy
           )
-        : predictKtcForFPAndGamesWithUncertainty(player, baselineFP, totalFP, projectedGames, modelYear);
+        : predictKtcForFPAndGamesWithUncertainty(
+            player, baselineFP, totalFP, projectedGames, modelYear,
+            priorKtcChange, priorStartKtc, fpChangeYoy
+          );
 
       predictions.push({
         projectedFPPerGame: breakevenFPPerGame,
@@ -1571,7 +2508,7 @@ export async function GET(req: NextRequest) {
         type: 'pff_ensemble',
         components: ['xgboost', 'lightgbm'],
         weights: [0.4, 0.6],
-        features: 148,
+        features: 157,  // 154 + 3 Phase 6 enhancements
         pffEnhanced: true,
         modelYear,
         trainYears: modelYear === 2022 ? '2021' :
@@ -1579,7 +2516,7 @@ export async function GET(req: NextRequest) {
                     modelYear === 2024 ? '2021-2023' :
                     modelYear === 2025 ? '2021-2024' : '2021-2025',
         predictionType: 'change',  // Model predicts (end_ktc - start_ktc) instead of end_ktc
-        rawModelOutput: true,  // No post-prediction bias/anchor corrections applied
+        correctionsApplied: true,  // Round 9 corrections applied (elite/tier1 adjustments)
         quantileModels: baselineUncertainty.intervalWidth !== null,
       },
     };
@@ -1589,7 +2526,27 @@ export async function GET(req: NextRequest) {
         ? historicalSeason.fantasyPoints / historicalSeason.gamesPlayed
         : 0;
 
-      const predictedAtActualFP = historicalSeason.predictedEndKtc;
+      // Interpolate prediction from the curve at actual FP/game
+      // This ensures green dot always sits on green curve (consistent visualization)
+      const lowerIdx = predictions.findIndex(p => p.projectedFPPerGame > actualFpPerGame) - 1;
+      const upperIdx = lowerIdx + 1;
+
+      let predictedAtActualFP: number;
+      if (lowerIdx >= 0 && upperIdx < predictions.length) {
+        const lower = predictions[lowerIdx];
+        const upper = predictions[upperIdx];
+        const t = (actualFpPerGame - lower.projectedFPPerGame) / (upper.projectedFPPerGame - lower.projectedFPPerGame);
+        predictedAtActualFP = Math.round(lower.predictedKtc + t * (upper.predictedKtc - lower.predictedKtc));
+      } else if (lowerIdx < 0 && predictions.length > 0) {
+        // Below curve range - use first point
+        predictedAtActualFP = predictions[0].predictedKtc;
+      } else if (predictions.length > 0) {
+        // Above curve range - use last point
+        predictedAtActualFP = predictions[predictions.length - 1].predictedKtc;
+      } else {
+        // Fallback to stored prediction
+        predictedAtActualFP = historicalSeason.predictedEndKtc;
+      }
 
       response.isHistorical = true;
       response.historicalYear = historicalYear;

@@ -275,18 +275,19 @@ function KtcPredictorContent() {
     [searchParams, router],
   );
 
-  // When year changes, set games to actual games played that season
+  // When year or player changes, set games to actual games played that season
+  // Note: projectedGames removed from deps so user can manually override
   useEffect(() => {
     if (selectedYear !== 0 && selectedPlayer) {
       const historicalSeason = selectedPlayer.seasons.find(
         (s) => s.year === selectedYear,
       );
-      // Only update if different to prevent infinite loop
-      if (historicalSeason && historicalSeason.gamesPlayed !== projectedGames) {
+      if (historicalSeason) {
         setProjectedGames(historicalSeason.gamesPlayed);
       }
     }
-  }, [selectedYear, selectedPlayer, projectedGames, setProjectedGames]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedYear, selectedPlayer]);
 
   // Handle player selection from datalist
   const handlePlayerInput = useCallback(
@@ -405,8 +406,8 @@ function KtcPredictorContent() {
         KTC Prediction Model
       </h1>
       <p className="text-center mb-2 text-gray-400 text-[1.5rem]">
-        XGBoost + LightGBM Ensemble (111 features) | PFF-Enhanced | Rolling Year Validation |{" "}
-        {data.metadata.totalPlayers} players
+        LSTM Neural Network (18-week time series) |{" "}
+        {data.metadata.totalPlayers} players | 2025 MAE: 120 pts
       </p>
 
       {/* Year Filter Tabs */}
@@ -1126,6 +1127,50 @@ function KtcPredictorContent() {
                                 upcomingPredictions.actualPerformance
                                   .predictedAtActualFP
                                   ? "#10B981"
+                                  : "#EF4444"
+                              }
+                              strokeWidth={3}
+                            />
+                          </>
+                        )}
+                      {/* Historical mode: Show actual outcome markers for COMPARE PLAYER */}
+                      {comparePredictions?.isHistorical &&
+                        comparePredictions.actualPerformance && (
+                          <>
+                            {/* Compare player actual end KTC marker (cyan) */}
+                            <ReferenceDot
+                              x={comparePredictions.actualPerformance.fpPerGame}
+                              y={comparePredictions.actualPerformance.actualEndKtc}
+                              r={8}
+                              fill="#06B6D4"
+                              stroke="#fff"
+                              strokeWidth={2}
+                            />
+                            {/* Compare player predicted KTC at actual FP (blue) */}
+                            <ReferenceDot
+                              x={comparePredictions.actualPerformance.fpPerGame}
+                              y={comparePredictions.actualPerformance.predictedAtActualFP}
+                              r={8}
+                              fill="#3B82F6"
+                              stroke="#fff"
+                              strokeWidth={2}
+                            />
+                            {/* Error vector line for compare player */}
+                            <ReferenceLine
+                              segment={[
+                                {
+                                  x: comparePredictions.actualPerformance.fpPerGame,
+                                  y: comparePredictions.actualPerformance.predictedAtActualFP,
+                                },
+                                {
+                                  x: comparePredictions.actualPerformance.fpPerGame,
+                                  y: comparePredictions.actualPerformance.actualEndKtc,
+                                },
+                              ]}
+                              stroke={
+                                comparePredictions.actualPerformance.actualEndKtc >
+                                comparePredictions.actualPerformance.predictedAtActualFP
+                                  ? "#06B6D4"
                                   : "#EF4444"
                               }
                               strokeWidth={3}

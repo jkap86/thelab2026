@@ -6,8 +6,8 @@
       ],
       "n_train": 154,
       "n_test": 218,
-      "mae_ktc": 408.0445992126963,
-      "r2_score": 0.9330020922249646
+      "mae_ktc": 373.13576506590715,
+      "r2_score": 0.9460680884293646
     },
     "2023": {
       "train_years": [
@@ -16,8 +16,8 @@
       ],
       "n_train": 372,
       "n_test": 285,
-      "mae_ktc": 401.35782983086665,
-      "r2_score": 0.9196497922706877
+      "mae_ktc": 345.2136174661245,
+      "r2_score": 0.9414362577174296
     },
     "2024": {
       "train_years": [
@@ -27,8 +27,8 @@
       ],
       "n_train": 657,
       "n_test": 372,
-      "mae_ktc": 293.7342784824461,
-      "r2_score": 0.9589647583711816
+      "mae_ktc": 306.0765385714922,
+      "r2_score": 0.9603766253863605
     },
     "2025": {
       "train_years": [
@@ -39,8 +39,8 @@
       ],
       "n_train": 1029,
       "n_test": 453,
-      "mae_ktc": 243.82468636401316,
-      "r2_score": 0.9655991381826933
+      "mae_ktc": 218.30527098385014,
+      "r2_score": 0.97511690923036
     },
     "2026": {
       "train_years": [
@@ -56,7 +56,7 @@
       "r2_score": null
     }
   },
-  "n_features": 124,
+  "n_features": 157,
   "feature_names": [
     "start_ktc",
     "ktc_30d_trend",
@@ -181,6 +181,39 @@
     "mid_tier_depreciation_signal",
     "snap_pct_decline",
     "starter_to_backup_risk",
-    "mid_tier_regression_factor"
+    "mid_tier_regression_factor",
+    "qb_stability_premium",
+    "qb_scarcity_factor",
+    "rb_accelerated_decline",
+    "position_cliff_multiplier",
+    "elite_young_upside",
+    "elite_momentum_amplifier",
+    "breakout_trajectory",
+    "tier2_hope_discount",
+    "non_starter_depreciation",
+    "one_hit_wonder_risk",
+    "peak_season_risk",
+    "buy_low_recovery",
+    "te_upside_amplifier",
+    "te_elite_ceiling",
+    "te_breakout_indicator",
+    "breakout_potential_ceiling",
+    "rookie_draft_capital_ceiling",
+    "momentum_ceiling_amplifier",
+    "young_elite_ceiling_boost",
+    "career_trajectory_boost",
+    "veteran_steep_decline",
+    "veteran_qb_cliff",
+    "aging_value_compression",
+    "position_age_interaction",
+    "elite_positive_change_dampener",
+    "young_breakout_ceiling",
+    "veteran_crash_amplifier",
+    "elite_crash_risk",
+    "breakout_score_enhanced",
+    "position_crash_risk",
+    "tier1_crash_risk",
+    "crash_magnitude_amplifier",
+    "breakout_ceiling_boost"
   ]
 }
