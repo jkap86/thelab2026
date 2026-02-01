@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   ComposedChart,
@@ -96,6 +96,26 @@ interface UpcomingPredictionResponse {
   actualPerformance?: ActualPerformance;
 }
 
+interface WhatIfResponse {
+  playerId: string;
+  name: string;
+  position: string;
+  year: number;
+  inputPpg: number;
+  inputGames: number;
+  predictedEndKtc: number;
+  actualEndKtc: number;
+  actualPpg: number;
+  actualGames: number;
+  modelTrainedOn: string;
+  startKtc: number;
+  error: number;
+  actualTotalFp: number;
+  inputTotalFp: number;
+  age: number;
+  yearsExp: number;
+}
+
 function ConfidenceBadge({
   score,
   factors,
@@ -103,6 +123,9 @@ function ConfidenceBadge({
   score: number;
   factors?: ConfidenceFactors;
 }) {
+  // Convert from 0-1 to percentage
+  const scorePercent = Math.round(score * 100);
+
   // Color based on score: green (65+), yellow (40-64), red (<40)
   const getColor = (s: number) => {
     if (s >= 65) return "bg-green-600 text-green-100";
@@ -113,9 +136,9 @@ function ConfidenceBadge({
   return (
     <div className="inline-flex items-center gap-2">
       <span
-        className={`px-3 py-1 rounded-full text-sm font-medium ${getColor(score)}`}
+        className={`px-3 py-1 rounded-full text-sm font-medium ${getColor(scorePercent)}`}
       >
-        {score}% Confidence
+        {scorePercent}% Confidence
       </span>
       {factors && (
         <div className="group relative">
@@ -157,8 +180,44 @@ function ConfidenceBadge({
   );
 }
 
-// Available years for filtering (matching PFF-enhanced rolling validation)
-const AVAILABLE_YEARS = [2022, 2023, 2024, 2025] as const;
+// Available years for filtering (2020-2021 use fallback models)
+const AVAILABLE_YEARS = [2020, 2021, 2022, 2023, 2024, 2025] as const;
+
+// Years that have year-specific projection models (trained on prior years only)
+const WHAT_IF_YEARS = [2022, 2023, 2024, 2025] as const;
+
+// Interpolate predicted KTC from the curve at a given PPG value
+function interpolateFromCurve(
+  predictions: Array<{ projectedFPPerGame: number; predictedKtc: number }>,
+  targetPpg: number
+): number | null {
+  if (!predictions || predictions.length === 0) return null;
+
+  // Find surrounding points
+  const sorted = [...predictions].sort((a, b) => a.projectedFPPerGame - b.projectedFPPerGame);
+
+  // Exact match
+  const exact = sorted.find(p => Math.abs(p.projectedFPPerGame - targetPpg) < 0.01);
+  if (exact) return exact.predictedKtc;
+
+  // Find bounding points for interpolation
+  const lowerIdx = sorted.findIndex(p => p.projectedFPPerGame > targetPpg) - 1;
+
+  if (lowerIdx < 0) {
+    // Below range - use first point
+    return sorted[0].predictedKtc;
+  }
+  if (lowerIdx >= sorted.length - 1) {
+    // Above range - use last point
+    return sorted[sorted.length - 1].predictedKtc;
+  }
+
+  // Linear interpolation
+  const lower = sorted[lowerIdx];
+  const upper = sorted[lowerIdx + 1];
+  const t = (targetPpg - lower.projectedFPPerGame) / (upper.projectedFPPerGame - lower.projectedFPPerGame);
+  return Math.round(lower.predictedKtc + t * (upper.predictedKtc - lower.predictedKtc));
+}
 
 function KtcPredictorContent() {
   const data = chartData as ChartDataOutput;
@@ -182,6 +241,10 @@ function KtcPredictorContent() {
   const [compareInputText, setCompareInputText] = useState("");
   const [showCompareInput, setShowCompareInput] = useState(false);
 
+  // What-if state for historical years
+  const [projectedPpg, setProjectedPpg] = useState<number>(10);
+  const [whatIfPrediction, setWhatIfPrediction] = useState<WhatIfResponse | null>(null);
+
   // Get model metrics for selected year
   const yearMetrics =
     selectedYear && data.metadata.modelsByYear
@@ -194,6 +257,50 @@ function KtcPredictorContent() {
   const comparePlayer = data.players.find(
     (p) => p.playerId === comparePlayerId,
   );
+
+  // Get available years for selected player (only show years they have data for)
+  const playerAvailableYears = useMemo(() => {
+    if (!selectedPlayer) return AVAILABLE_YEARS;
+    const playerYears = selectedPlayer.seasons.map(s => s.year);
+    return AVAILABLE_YEARS.filter(y => playerYears.includes(y));
+  }, [selectedPlayer]);
+
+  // Calculate actual PPG from historical season (for what-if)
+  const historicalSeason = selectedPlayer?.seasons.find(s => s.year === selectedYear);
+  const historicalActualPpg = historicalSeason && historicalSeason.gamesPlayed > 0
+    ? historicalSeason.fantasyPoints / historicalSeason.gamesPlayed
+    : null;
+
+  // Calculate curve offset to match table's predicted value
+  // The table (chart-data.json) is the source of truth - offset the curve so it passes through the table value
+  const curveOffset = useMemo(() => {
+    if (!upcomingPredictions?.predictions || selectedYear === 0 || !historicalSeason) {
+      return 0;
+    }
+
+    const tablePredicted = historicalSeason.predictedEndKtc;
+    if (tablePredicted < 0) return 0; // No valid table prediction
+
+    const actualPpg = historicalSeason.gamesPlayed > 0
+      ? historicalSeason.fantasyPoints / historicalSeason.gamesPlayed
+      : 0;
+
+    const curveValueAtActualPpg = interpolateFromCurve(upcomingPredictions.predictions, actualPpg);
+    if (!curveValueAtActualPpg) return 0;
+
+    return tablePredicted - curveValueAtActualPpg;
+  }, [upcomingPredictions, selectedYear, historicalSeason]);
+
+  // Apply offset to curve data - transforms predictions so curve passes through table value
+  const offsetPredictions = useMemo(() => {
+    if (!upcomingPredictions?.predictions || curveOffset === 0) {
+      return upcomingPredictions?.predictions;
+    }
+    return upcomingPredictions.predictions.map(p => ({
+      ...p,
+      predictedKtc: p.predictedKtc + curveOffset
+    }));
+  }, [upcomingPredictions, curveOffset]);
 
   // Sync input text with selected player
   useEffect(() => {
@@ -213,6 +320,19 @@ function KtcPredictorContent() {
       setCompareInputText("");
     }
   }, [comparePlayer]);
+
+  // Reset year to 2026 (projection mode) if selected year is not available for the new player
+  useEffect(() => {
+    if (selectedPlayer && selectedYear !== 0) {
+      const playerYears = selectedPlayer.seasons.map(s => s.year);
+      if (!playerYears.includes(selectedYear)) {
+        // Reset to 2026 projection mode (selectedYear = 0)
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete("year");
+        router.replace(`?${params.toString()}`, { scroll: false });
+      }
+    }
+  }, [selectedPlayer, selectedYear, searchParams, router]);
 
   // Initialize games param if not present
   useEffect(() => {
@@ -288,6 +408,36 @@ function KtcPredictorContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedYear, selectedPlayer]);
+
+  // Initialize PPG slider to actual when player/year changes
+  useEffect(() => {
+    if (historicalActualPpg !== null) {
+      setProjectedPpg(Math.round(historicalActualPpg * 10) / 10);
+    }
+  }, [selectedPlayerId, selectedYear, historicalActualPpg]);
+
+  // Fetch what-if prediction (debounced) when sliders change
+  useEffect(() => {
+    if (!selectedPlayerId || selectedYear === 0) {
+      setWhatIfPrediction(null);
+      return;
+    }
+
+    // Only fetch for years with what-if models
+    if (!WHAT_IF_YEARS.includes(selectedYear as typeof WHAT_IF_YEARS[number])) {
+      setWhatIfPrediction(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      fetch(`/api/ktc-predict/what-if?playerId=${selectedPlayerId}&year=${selectedYear}&ppg=${projectedPpg}&games=${projectedGames}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => setWhatIfPrediction(data))
+        .catch(() => setWhatIfPrediction(null));
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [selectedPlayerId, selectedYear, projectedPpg, projectedGames]);
 
   // Handle player selection from datalist
   const handlePlayerInput = useCallback(
@@ -377,10 +527,10 @@ function KtcPredictorContent() {
   }, [selectedPlayerId, comparePlayerId, projectedGames, selectedYear]);
 
   // Filter seasons by selected year (0 = all years)
-  // Historical Performance shows years BEFORE selected year (model's track record)
+  // Historical Performance shows years UP TO AND INCLUDING selected year
   const filteredSeasons =
     selectedPlayer?.seasons.filter(
-      (s) => selectedYear === 0 || s.year < selectedYear,
+      (s) => selectedYear === 0 || s.year <= selectedYear,
     ) || [];
 
   // Prepare historical chart data - vectors from actual to predicted (filtered by year)
@@ -406,13 +556,13 @@ function KtcPredictorContent() {
         KTC Prediction Model
       </h1>
       <p className="text-center mb-2 text-gray-400 text-[1.5rem]">
-        LSTM Neural Network (18-week time series) |{" "}
-        {data.metadata.totalPlayers} players | 2025 MAE: 120 pts
+        Projection Neural Network (14 features) |{" "}
+        {data.metadata.totalPlayers} players | 2025 MAE: {data.metadata.modelsByYear?.["2025"]?.mae || 644} pts
       </p>
 
-      {/* Year Filter Tabs */}
+      {/* Year Filter Tabs - only show years player has data for */}
       <div className="flex justify-center gap-2 mb-6 text-[2rem]">
-        {AVAILABLE_YEARS.map((year) => {
+        {playerAvailableYears.map((year) => {
           const metrics = data.metadata.modelsByYear?.[year.toString()];
           return (
             <button
@@ -444,7 +594,7 @@ function KtcPredictorContent() {
         >
           2026
           <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block whitespace-nowrap px-3 py-2 bg-gray-800 rounded-lg shadow-lg border border-gray-600 text-[1.5rem] text-gray-300 z-10">
-            Model trained on 2021-2025 (all data)
+            Model trained on 2020-2025 (all data)
           </span>
         </button>
       </div>
@@ -464,7 +614,7 @@ function KtcPredictorContent() {
       {selectedYear === 0 && (
         <p className="text-center mb-6 text-[1.5rem] text-gray-500">
           2026 Projection | Model trained on{" "}
-          <span className="text-purple-400">2021-2025</span> (all available
+          <span className="text-purple-400">2020-2025</span> (all available
           data)
         </p>
       )}
@@ -626,7 +776,11 @@ function KtcPredictorContent() {
                       return (
                         <tr
                           key={season.year}
-                          className="border-b border-gray-700"
+                          className={`border-b border-gray-700 ${
+                            season.year === selectedYear
+                              ? "bg-purple-900/50 ring-1 ring-purple-500"
+                              : ""
+                          }`}
                         >
                           <td className="py-2 px-3 text-center">
                             {season.year}
@@ -701,7 +855,11 @@ function KtcPredictorContent() {
                           return (
                             <tr
                               key={season.year}
-                              className="border-b border-gray-700"
+                              className={`border-b border-gray-700 ${
+                                season.year === selectedYear
+                                  ? "bg-purple-900/50 ring-1 ring-purple-500"
+                                  : ""
+                              }`}
                             >
                               <td className="py-2 px-3 text-center">
                                 {season.year}
@@ -888,6 +1046,33 @@ function KtcPredictorContent() {
                   : "Predicted End KTC by Projected FP/Game"}
               </p>
 
+              {/* PPG Slider - for historical what-if */}
+              {selectedYear !== 0 && WHAT_IF_YEARS.includes(selectedYear as typeof WHAT_IF_YEARS[number]) && (
+                <div className="mb-4 px-4">
+                  <label className="block text-gray-400 mb-1">
+                    Projected FP/Game:{" "}
+                    <span className="text-white font-semibold">{projectedPpg.toFixed(1)}</span>
+                    {historicalActualPpg && (
+                      <span className="text-green-400 ml-2">(Actual: {historicalActualPpg.toFixed(1)})</span>
+                    )}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="30"
+                    step="0.5"
+                    value={projectedPpg}
+                    onChange={(e) => setProjectedPpg(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>0</span>
+                    <span>15</span>
+                    <span>30</span>
+                  </div>
+                </div>
+              )}
+
               {/* Games Played Slider */}
               <div className="mb-4 px-4">
                 <label
@@ -938,7 +1123,7 @@ function KtcPredictorContent() {
                 ) : upcomingPredictions ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart
-                      data={upcomingPredictions.predictions}
+                      data={offsetPredictions}
                       margin={{ top: 20, right: 20, bottom: 40, left: 40 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -1073,6 +1258,17 @@ function KtcPredictorContent() {
                           }}
                         />
                       )}
+                      {/* What-If Prediction Marker - shows slider position on curve */}
+                      {selectedYear !== 0 && upcomingPredictions && !comparePredictions && offsetPredictions && (
+                        <ReferenceDot
+                          x={projectedPpg}
+                          y={interpolateFromCurve(offsetPredictions, projectedPpg) ?? 0}
+                          r={10}
+                          fill="#A855F7"
+                          stroke="#fff"
+                          strokeWidth={3}
+                        />
+                      )}
                       {/* Historical mode: Show actual outcome markers */}
                       {upcomingPredictions.isHistorical &&
                         upcomingPredictions.actualPerformance && (
@@ -1187,6 +1383,34 @@ function KtcPredictorContent() {
                   </div>
                 )}
               </div>
+              {/* What-If Results - compact display for historical years */}
+              {selectedYear !== 0 && whatIfPrediction && upcomingPredictions && !comparePredictions && offsetPredictions && (() => {
+                // Use offset predictions so the displayed value matches the dot position on the curve
+                const interpolatedKtc = interpolateFromCurve(offsetPredictions, projectedPpg);
+                const curveError = interpolatedKtc ? interpolatedKtc - whatIfPrediction.actualEndKtc : whatIfPrediction.error;
+                return (
+                  <div className="mt-4 grid grid-cols-4 gap-2 text-center text-sm">
+                    <div>
+                      <p className="text-gray-500">Start KTC</p>
+                      <p className="text-gray-300 font-semibold">{whatIfPrediction.startKtc.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Predicted</p>
+                      <p className="text-purple-400 font-semibold">{(interpolatedKtc ?? whatIfPrediction.predictedEndKtc).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Actual</p>
+                      <p className="text-green-400 font-semibold">{whatIfPrediction.actualEndKtc.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Error</p>
+                      <p className={curveError > 0 ? "text-red-400 font-semibold" : "text-cyan-400 font-semibold"}>
+                        {curveError > 0 ? "+" : ""}{curveError.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
               {upcomingPredictions && (
                 <div className="mt-4 text-center text-gray-500">
                   {comparePredictions ? (
@@ -1195,6 +1419,10 @@ function KtcPredictorContent() {
                       {" vs "}
                       <span className="text-blue-400">{comparePredictions.name}</span>
                       {" | Dashed lines show current KTC"}
+                    </p>
+                  ) : selectedYear !== 0 && whatIfPrediction ? (
+                    <p>
+                      <span className="text-purple-400">Purple dot</span>: Your what-if scenario | Move PPG slider to explore predictions
                     </p>
                   ) : upcomingPredictions.isHistorical &&
                   upcomingPredictions.actualPerformance ? (

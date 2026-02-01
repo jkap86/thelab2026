@@ -1,0 +1,2 @@
+⚠ Port 3000 is in use by process 206736, using available port 3001 instead.
+⨯ Unable to acquire lock at C:\Users\jkap8\Documents\DEV\TheLab-Nextjs\thelab\.next\dev\lock, is another instance of next dev running?
