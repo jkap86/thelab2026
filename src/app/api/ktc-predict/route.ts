@@ -1849,7 +1849,7 @@ export async function GET(req: NextRequest) {
     // Generate predictions for FP/game range
     const rangeMax = 25;
     const fpPerGameRange: number[] = [];
-    for (let fp = 0; fp <= rangeMax; fp += 0.5) {
+    for (let fp = 0; fp <= rangeMax; fp += 0.1) {
       fpPerGameRange.push(fp);
     }
 
@@ -1937,6 +1937,49 @@ export async function GET(req: NextRequest) {
         predictedKtcHigh: predResult.predictedKtcHigh,
       };
     });
+
+    // Apply Gaussian smoothing to prediction curve to reduce sharp bumps from NN
+    // Only apply to 2026 projections (not historical where we have actual data)
+    if (!historicalSeason && predictions.length > 5) {
+      const smoothingWindow = 5; // 5-point Gaussian smoothing
+      const sigma = 1.5;
+      const gaussianWeights: number[] = [];
+      for (let i = -Math.floor(smoothingWindow / 2); i <= Math.floor(smoothingWindow / 2); i++) {
+        gaussianWeights.push(Math.exp(-(i * i) / (2 * sigma * sigma)));
+      }
+      const weightSum = gaussianWeights.reduce((a, b) => a + b, 0);
+      const normalizedWeights = gaussianWeights.map(w => w / weightSum);
+
+      const smoothedPredictions = predictions.map((pred, idx) => {
+        let smoothedKtc = 0;
+        let smoothedLow = 0;
+        let smoothedHigh = 0;
+        let totalWeight = 0;
+
+        for (let offset = -Math.floor(smoothingWindow / 2); offset <= Math.floor(smoothingWindow / 2); offset++) {
+          const neighborIdx = idx + offset;
+          if (neighborIdx >= 0 && neighborIdx < predictions.length) {
+            const neighbor = predictions[neighborIdx];
+            const weight = normalizedWeights[offset + Math.floor(smoothingWindow / 2)];
+            smoothedKtc += neighbor.predictedKtc * weight;
+            smoothedLow += (neighbor.predictedKtcLow ?? neighbor.predictedKtc) * weight;
+            smoothedHigh += (neighbor.predictedKtcHigh ?? neighbor.predictedKtc) * weight;
+            totalWeight += weight;
+          }
+        }
+
+        return {
+          ...pred,
+          predictedKtc: Math.round(smoothedKtc / totalWeight),
+          predictedKtcLow: Math.round(smoothedLow / totalWeight),
+          predictedKtcHigh: Math.round(smoothedHigh / totalWeight),
+        };
+      });
+
+      // Replace original predictions with smoothed ones
+      predictions.length = 0;
+      predictions.push(...smoothedPredictions);
+    }
 
     // Get uncertainty info for the baseline prediction (at average FP/game)
     const baselineUncertainty = historicalSeason && historicalYear
@@ -2032,7 +2075,7 @@ export async function GET(req: NextRequest) {
       modelInfo: {
         type: 'projection',
         components: ['feedforward-nn'],
-        features: 14,  // 14 input features (games, ppg, position, age, etc.)
+        features: 57,  // 57 input features (v9 architecture)
         modelYear,
         trainYears: modelYear === 2022 ? '2020-2021' :
                     modelYear === 2023 ? '2020-2022' :

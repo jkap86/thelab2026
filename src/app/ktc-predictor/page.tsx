@@ -293,10 +293,25 @@ function KtcPredictorContent() {
 
   // Apply offset to curve data - transforms predictions so curve passes through table value
   const offsetPredictions = useMemo(() => {
-    if (!upcomingPredictions?.predictions || curveOffset === 0) {
-      return upcomingPredictions?.predictions;
+    const predictions = upcomingPredictions?.predictions;
+    if (!predictions || predictions.length === 0) {
+      return undefined;
     }
-    return upcomingPredictions.predictions.map(p => ({
+    // Filter out any invalid predictions (NaN, undefined, etc.)
+    const validPredictions = predictions.filter(p =>
+      typeof p.predictedKtc === 'number' &&
+      !isNaN(p.predictedKtc) &&
+      typeof p.projectedFPPerGame === 'number' &&
+      !isNaN(p.projectedFPPerGame)
+    );
+    if (validPredictions.length === 0) {
+      console.warn('No valid predictions found in API response');
+      return undefined;
+    }
+    if (curveOffset === 0) {
+      return validPredictions;
+    }
+    return validPredictions.map(p => ({
       ...p,
       predictedKtc: p.predictedKtc + curveOffset
     }));
@@ -504,8 +519,27 @@ function KtcPredictorContent() {
       url1 += `&year=${selectedYear}`;
     }
 
-    const promises: Promise<UpcomingPredictionResponse>[] = [
-      fetch(url1).then((r) => r.json()),
+    const fetchWithErrorHandling = async (url: string): Promise<UpcomingPredictionResponse | null> => {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          console.error(`API error for ${url}: ${response.status} ${response.statusText}`);
+          return null;
+        }
+        const data = await response.json();
+        // Validate that predictions array exists and has data
+        if (!data.predictions || data.predictions.length === 0) {
+          console.warn(`No predictions in response for ${url}`);
+        }
+        return data;
+      } catch (error) {
+        console.error(`Fetch error for ${url}:`, error);
+        return null;
+      }
+    };
+
+    const promises: Promise<UpcomingPredictionResponse | null>[] = [
+      fetchWithErrorHandling(url1),
     ];
 
     // Add second player if comparing
@@ -514,7 +548,7 @@ function KtcPredictorContent() {
       if (selectedYear !== 0) {
         url2 += `&year=${selectedYear}`;
       }
-      promises.push(fetch(url2).then((r) => r.json()));
+      promises.push(fetchWithErrorHandling(url2));
     }
 
     Promise.all(promises)
@@ -523,7 +557,10 @@ function KtcPredictorContent() {
         setComparePredictions(compare || null);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((error) => {
+        console.error('Error fetching predictions:', error);
+        setLoading(false);
+      });
   }, [selectedPlayerId, comparePlayerId, projectedGames, selectedYear]);
 
   // Filter seasons by selected year (0 = all years)
@@ -556,8 +593,8 @@ function KtcPredictorContent() {
         KTC Prediction Model
       </h1>
       <p className="text-center mb-2 text-gray-400 text-[1.5rem]">
-        Projection Neural Network (14 features) |{" "}
-        {data.metadata.totalPlayers} players | 2025 MAE: {data.metadata.modelsByYear?.["2025"]?.mae || 644} pts
+        Projection Neural Network (57 features) |{" "}
+        {data.metadata.totalPlayers} players | 2025 MAE: {data.metadata.modelsByYear?.["2025"]?.mae || 515} pts
       </p>
 
       {/* Year Filter Tabs - only show years player has data for */}
@@ -1120,7 +1157,7 @@ function KtcPredictorContent() {
                   <div className="flex items-center justify-center h-full">
                     <p className="text-gray-400">Loading predictions...</p>
                   </div>
-                ) : upcomingPredictions ? (
+                ) : upcomingPredictions && offsetPredictions && offsetPredictions.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart
                       data={offsetPredictions}
@@ -1375,6 +1412,12 @@ function KtcPredictorContent() {
                         )}
                     </ComposedChart>
                   </ResponsiveContainer>
+                ) : upcomingPredictions && (!offsetPredictions || offsetPredictions.length === 0) ? (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-gray-400">
+                      No valid predictions available for this player/year
+                    </p>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-full">
                     <p className="text-gray-400">
@@ -1387,20 +1430,24 @@ function KtcPredictorContent() {
               {selectedYear !== 0 && whatIfPrediction && upcomingPredictions && !comparePredictions && offsetPredictions && (() => {
                 // Use offset predictions so the displayed value matches the dot position on the curve
                 const interpolatedKtc = interpolateFromCurve(offsetPredictions, projectedPpg);
-                const curveError = interpolatedKtc ? interpolatedKtc - whatIfPrediction.actualEndKtc : whatIfPrediction.error;
+                const actualEndKtc = whatIfPrediction.actualEndKtc ?? 0;
+                const predictedEndKtc = whatIfPrediction.predictedEndKtc ?? 0;
+                const curveError = interpolatedKtc != null && actualEndKtc > 0
+                  ? Math.round(interpolatedKtc - actualEndKtc)
+                  : (whatIfPrediction.error ?? 0);
                 return (
                   <div className="mt-4 grid grid-cols-4 gap-2 text-center text-sm">
                     <div>
                       <p className="text-gray-500">Start KTC</p>
-                      <p className="text-gray-300 font-semibold">{whatIfPrediction.startKtc.toLocaleString()}</p>
+                      <p className="text-gray-300 font-semibold">{(whatIfPrediction.startKtc ?? 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-gray-500">Predicted</p>
-                      <p className="text-purple-400 font-semibold">{(interpolatedKtc ?? whatIfPrediction.predictedEndKtc).toLocaleString()}</p>
+                      <p className="text-purple-400 font-semibold">{(interpolatedKtc ?? predictedEndKtc).toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-gray-500">Actual</p>
-                      <p className="text-green-400 font-semibold">{whatIfPrediction.actualEndKtc.toLocaleString()}</p>
+                      <p className="text-green-400 font-semibold">{actualEndKtc.toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-gray-500">Error</p>

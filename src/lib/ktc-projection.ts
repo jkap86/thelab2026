@@ -42,6 +42,29 @@ export interface PlayerContext {
   snapPct: number;
   // Optional: for trend calculation
   priorPriorFp?: number;
+  // Optional: for breakout detection (Phase 2)
+  priorSnapPct?: number;
+  lateSeasonSurge?: number; // Pre-computed from weekly stats, range [-1, 1]
+  // Optional: for market sentiment (v3)
+  ktcMomentum?: number; // Average of 30d and 90d trends, normalized [-1, 1]
+  marketConfidence?: number; // Inverse volatility, normalized [0, 1]
+  // Optional: for efficiency (v3)
+  consistencyScore?: number; // 1 - weekly_fp_cv, range [0, 1]
+  touchesPerGame?: number; // (targets + carries) / games, normalized [0, 1]
+  // Optional: for weekly/red zone data (v5)
+  ktcTrajectory?: number; // In-season KTC change (second half vs first half), normalized [-1, 1]
+  redZoneEfficiency?: number; // TDs / red zone opportunities, range [0, 1]
+  opportunityShare?: number; // Target/rush share based on position, range [0, 1]
+  elitePeak?: number; // Elite + elite PPG indicator, 0 or 1
+  // Optional: for TE elite fix (v6)
+  teEliteIndicator?: number; // TE-specific elite indicator with lower thresholds, 0 or 1
+  // Optional: v7 comprehensive improvements
+  boomRate?: number; // % of games with boom performance, range [0, 1]
+  bustRate?: number; // % of games with bust performance, range [0, 1]
+  last4VsSeason?: number; // Late season vs full season FP ratio, typically ~1.0
+  yardsPerTarget?: number; // For WR/TE efficiency
+  yardsPerCarry?: number; // For RB efficiency
+  weeklyKtc?: Array<{ week: number; ktc: number }>; // Weekly KTC data for momentum
 }
 
 export interface ProjectionInput extends PlayerContext {
@@ -50,6 +73,7 @@ export interface ProjectionInput extends PlayerContext {
 }
 
 interface ModelWeights {
+  // v3 architecture: 30 → 128 → 64 → 32 → 16 → 1
   'fc1.weight': number[][];
   'fc1.bias': number[];
   'bn1.weight': number[];
@@ -64,13 +88,28 @@ interface ModelWeights {
   'bn2.running_var': number[];
   'fc3.weight': number[][];
   'fc3.bias': number[];
+  'bn3.weight': number[];
+  'bn3.bias': number[];
+  'bn3.running_mean': number[];
+  'bn3.running_var': number[];
+  'fc4.weight': number[][];
+  'fc4.bias': number[];
+  'bn4.weight': number[];
+  'bn4.bias': number[];
+  'bn4.running_mean': number[];
+  'bn4.running_var': number[];
+  'fc_out.weight': number[][];
+  'fc_out.bias': number[];
   config: {
     input_size: number;
     hidden1: number;
     hidden2: number;
+    hidden3?: number;
+    hidden4?: number;
     output_size: number;
     feature_names: string[];
     ktc_max: number;
+    version?: string;
   };
 }
 
@@ -180,16 +219,21 @@ export class KTCProjectionModel {
   }
 
   /**
-   * Prepare input features from player context and user inputs (18 features - Experiment 1)
+   * Prepare input features from player context and user inputs (51 features - v8)
    *
-   * Removed features (7 redundant):
-   * - is_te: derivable from other position flags
-   * - years_from_peak: redundant with age
-   * - years_before_peak: perfect inverse of years_from_peak
-   * - rb_games_interaction: redundant with base games
-   * - rb_ppg_interaction: redundant with base ppg
-   * - is_elite: arbitrary threshold on start_ktc
-   * - games_premium: binary threshold loses continuous signal
+   * v3 additions:
+   * - Market sentiment (2): ktc_momentum, market_confidence
+   * - Efficiency (2): consistency_score, touches_per_game
+   *
+   * v5 additions:
+   * - Weekly/Red Zone (4): ktc_trajectory, red_zone_efficiency, opportunity_share, elite_peak
+   *
+   * v6 additions:
+   * - TE Elite fix (1): te_elite_indicator
+   *
+   * v7 additions:
+   * - Comprehensive improvements (8): backup_qb_penalty, weekly_ktc_momentum, ktc_surge_indicator,
+   *   boom_rate, bust_rate, late_season_ratio, efficiency_score, rookie_tier
    */
   private prepareFeatures(input: ProjectionInput): number[] {
     const {
@@ -204,6 +248,27 @@ export class KTCProjectionModel {
       priorSeasonGames,
       snapPct,
       priorPriorFp = 0,
+      priorSnapPct = snapPct, // Default to current if not provided
+      lateSeasonSurge = 0, // Default to 0 if not provided
+      // v3 features - default to neutral values
+      ktcMomentum = 0, // No trend by default
+      marketConfidence = 0.5, // Middle confidence by default
+      consistencyScore = 0.5, // Average consistency by default
+      touchesPerGame = 0.5, // Average touches by default
+      // v5 features - default to neutral values
+      ktcTrajectory = 0, // No in-season change by default
+      redZoneEfficiency = 0, // No red zone data by default
+      opportunityShare = 0, // No share data by default
+      elitePeak = 0, // Not elite peak by default
+      // v6 features - TE elite fix
+      teEliteIndicator, // Will be computed if not provided
+      // v7 features - comprehensive improvements
+      boomRate = 0, // No boom data by default
+      bustRate = 0, // No bust data by default
+      last4VsSeason = 1.0, // Neutral by default
+      yardsPerTarget = 0, // No YPT data by default
+      yardsPerCarry = 0, // No YPC data by default
+      weeklyKtc = [], // No weekly KTC data by default
     } = input;
 
     // Position one-hot encoding (3 features - is_te removed as derivable)
@@ -220,7 +285,7 @@ export class KTCProjectionModel {
     const yearsPastCliff = Math.max(0, age - cliffAge) / 10;
     const ageDecayFactor = age > 30 ? Math.pow((age - 30) / 10, 1.5) : 0;
 
-    // === Breakout Detection Features ===
+    // === Breakout Detection Features (original) ===
     const isRookie = yearsExp <= 1 ? 1 : 0;
     const highDraftCapital = draftRound <= 2 ? 1 : 0;
     const rookieWithCapital = isRookie * highDraftCapital;
@@ -231,7 +296,184 @@ export class KTCProjectionModel {
     const rbAgeInteraction = (isRb * (age - 25)) / 10;
     const qbUpsideInteraction = isQb * yearsBeforePeak;
 
-    // Build feature vector (18 features - Experiment 1)
+    // === Elite Calibration Features (Phase 1) ===
+    const startKtcNorm = currentKtc / KTC_MAX;
+    // Elite ceiling pressure - high KTC players have less room to grow
+    const eliteCeilingPressure = Math.max(0, startKtcNorm - 0.6) * 2.5;
+    // Elite age risk - elite + aging = crash risk
+    const isElite = currentKtc > 6000 ? 1 : 0;
+    const eliteAgeRisk = isElite * Math.max(0, (age - peakAge) / 10);
+    // KTC upside cap - diminishing returns at top
+    const ktcUpsideCap = Math.max(0, 1 - startKtcNorm);
+
+    // === Breakout Detection Features (Phase 2) ===
+    // Snap trajectory - change from prior year
+    const snapTrajectory = snapPct - priorSnapPct;
+    // Young rising snap - binary flag for young players with increasing snaps
+    const youngRisingSnap = yearsExp <= 3 && snapTrajectory > 0.15 ? 1 : 0;
+    // Efficiency vs opportunity - high efficiency + low snaps = upside
+    let efficiencyVsSnap = snapPct > 0 ? (ppg / 25) / Math.max(snapPct, 0.1) : 0;
+    efficiencyVsSnap = Math.min(efficiencyVsSnap, 3.0); // Cap at 3x
+    // TE development stage - TEs peak later (years 2-4 are breakout years)
+    const teDevelopmentStage = position === 'TE' && yearsExp >= 2 && yearsExp <= 4 ? 1 : 0;
+
+    // === Analysis Insights Features (v4) ===
+    // QB Backup Detector - backup QBs produce stats but market doesn't value them
+    const priorPpg = priorSeasonGames > 0 ? priorSeasonFp / priorSeasonGames : 0;
+    let qbBackupSignal = 0;
+    if (isQb) {
+      const isLowPrior = priorPpg < 12 && priorSeasonGames > 0;
+      const isLatePickVet = draftRound >= 4 && yearsExp > 1;
+      if (isLowPrior || isLatePickVet) {
+        qbBackupSignal = 1;
+      }
+    }
+
+    // Elite Sustain Bonus - elite players maintaining elite production
+    let eliteSustain = 0;
+    if (currentKtc >= 8000 && ppg >= 18) {
+      eliteSustain = 1;
+    } else if (currentKtc >= 6000 && ppg >= 20) {
+      eliteSustain = 0.5;
+    }
+
+    // Sample Size Confidence
+    const sampleConfidence = Math.min(1, games / 14);
+
+    // Age-Market Penalty
+    let ageMarketPenalty = 0;
+    if (age >= 28) {
+      let basePenalty = (age - 28) / 10;
+      if (priorTrend < 0) {
+        basePenalty *= 1.5;
+      }
+      ageMarketPenalty = Math.min(1, basePenalty);
+    }
+
+    // === TE Elite Indicator (v6) ===
+    // TEs have lower KTC ceilings than QBs/WRs, so need lower thresholds
+    // Addresses Kelce (-2123), Hockenson (-2617) underprediction
+    const isTE = position === 'TE';
+    let teEliteIndicatorValue = teEliteIndicator ?? 0;
+    if (teEliteIndicator === undefined) {
+      if (isTE && currentKtc >= 5000 && ppg >= 12) {
+        teEliteIndicatorValue = 1;
+      } else if (isTE && currentKtc >= 4000 && ppg >= 15) {
+        teEliteIndicatorValue = 1;
+      }
+    }
+
+    // ============================================================
+    // v7 Features: Comprehensive Improvements
+    // ============================================================
+
+    // Feature 39: Backup QB Penalty
+    // Problem: Backup QBs with <10 games are overpredicted by +2000
+    let backupQbPenalty = 0;
+    if (isQb && games < 10) {
+      backupQbPenalty = (10 - games) / 10; // 0-1 scale, higher = more penalty
+    }
+
+    // Feature 40: Weekly KTC Momentum
+    // Problem: Missing in-season breakouts
+    let weeklyKtcMomentum = 0;
+    if (weeklyKtc && weeklyKtc.length >= 8) {
+      const earlyKtcValues = weeklyKtc.slice(0, 4).filter(w => w.ktc > 0).map(w => w.ktc);
+      const lateKtcValues = weeklyKtc.slice(-4).filter(w => w.ktc > 0).map(w => w.ktc);
+      if (earlyKtcValues.length > 0 && lateKtcValues.length > 0) {
+        const earlyAvg = earlyKtcValues.reduce((a, b) => a + b, 0) / earlyKtcValues.length;
+        const lateAvg = lateKtcValues.reduce((a, b) => a + b, 0) / lateKtcValues.length;
+        if (earlyAvg > 0) {
+          weeklyKtcMomentum = Math.max(-1, Math.min(1, (lateAvg - earlyAvg) / Math.max(earlyAvg, 1000)));
+        }
+      }
+    }
+
+    // Feature 41: KTC Surge Indicator
+    // Problem: Missing explosive breakout signals
+    let ktcSurgeIndicator = 0;
+    if (weeklyKtc && weeklyKtc.length >= 4) {
+      let surgeWeeks = 0;
+      for (let i = 1; i < weeklyKtc.length; i++) {
+        const prevKtc = weeklyKtc[i - 1].ktc;
+        const currKtc = weeklyKtc[i].ktc;
+        if (prevKtc > 0 && currKtc > prevKtc * 1.05) { // 5% gain
+          surgeWeeks++;
+        }
+      }
+      ktcSurgeIndicator = surgeWeeks / Math.max(weeklyKtc.length - 1, 1);
+    }
+
+    // Feature 44: Late Season Ratio (normalized)
+    // Problem: Missing late-season momentum signal
+    const lateSeasonRatio = Math.max(0.5, Math.min(1.5, last4VsSeason));
+    const lateSeasonRatioNorm = (lateSeasonRatio - 0.5) / 1.0; // Normalize to 0-1
+
+    // Feature 45: Efficiency Score (Position-Specific)
+    // Problem: Volume conflated with quality
+    let efficiencyScore = 0.5; // Default neutral
+    if (isWr || isTE) {
+      efficiencyScore = Math.min(1, yardsPerTarget / 12); // 12 YPT = elite
+    } else if (isRb) {
+      efficiencyScore = Math.min(1, yardsPerCarry / 5); // 5 YPC = elite
+    }
+
+    // Feature 46: Rookie Tier
+    // Problem: Single rookie adjustment inadequate
+    let rookieTier = 0;
+    if (yearsExp === 0) { // True rookie
+      if (draftRound <= 2) {
+        rookieTier = 1.0; // Elite prospect, expect gains
+      } else if (draftRound <= 4) {
+        rookieTier = 0.5; // Good prospect
+      } else {
+        rookieTier = -0.5; // Late pick, less upside
+      }
+    }
+
+    // ============================================================
+    // v8 Features: Validation Analysis Improvements (Feb 2026)
+    // Based on deep analysis showing:
+    // - Elite (>6000 KTC): -1,567 bias (severe underprediction)
+    // - Low games (0-8): +457 bias (severe overestimation)
+    // - 20+ PPG: MAE 1,604 (2x worse than 10-15 PPG)
+    // ============================================================
+
+    // Feature 47: Low-Games Penalty (ALL POSITIONS)
+    // Problem: 0-8 games overpredicted by +457 bias
+    let lowGamesPenalty = 0;
+    if (games < 10) {
+      lowGamesPenalty = ((10 - games) / 10) * 0.5; // 0-0.5 scale
+    }
+
+    // Feature 48: Elite Value Anchor
+    // Problem: Elite (>6000 KTC) underpredicted by -1,567 bias
+    // Counter elite_ceiling_pressure for proven elite performers
+    let eliteValueAnchor = 0;
+    if (currentKtc >= 6000 && ppg >= 15) {
+      eliteValueAnchor = 1.0; // Strong anchor to maintain value
+    } else if (currentKtc >= 7000) {
+      eliteValueAnchor = 0.5; // Even without high PPG, elite tier is sticky
+    }
+
+    // Feature 49: PPG Nonlinearity Signal
+    // Problem: 20+ PPG has 2x worse accuracy (MAE 1,604 vs 821 for 10-15 PPG)
+    let ppgNonlinearity = 0;
+    if (ppg >= 20) {
+      ppgNonlinearity = 1.0; // Elite scorer flag
+    } else if (ppg >= 15) {
+      ppgNonlinearity = (ppg - 15) / 5; // Gradual ramp 0-1
+    }
+
+    // Feature 50: Opportunity Increase Signal
+    // Problem: Breakouts correlate with opportunity increase
+    // Amplified snap trajectory signal
+    let opportunityIncrease = 0;
+    if (priorSnapPct !== undefined && snapPct > priorSnapPct) {
+      opportunityIncrease = Math.min(1.0, (snapPct - priorSnapPct) * 2); // Amplified signal
+    }
+
+    // Build feature vector (51 features - v8 with Validation Analysis Improvements)
     return [
       // User inputs (2)
       games / GAMES_MAX, // 0: games normalized
@@ -243,7 +485,7 @@ export class KTCProjectionModel {
       // Demographics (4)
       age / 40, // 5: age normalized
       yearsExp / 15, // 6: experience normalized
-      currentKtc / KTC_MAX, // 7: starting KTC normalized
+      startKtcNorm, // 7: starting KTC normalized
       (8 - draftRound) / 7, // 8: draft capital (higher = better)
       // Historical (3)
       priorSeasonFp / FP_MAX_SEASON, // 9: prior year production
@@ -258,16 +500,62 @@ export class KTCProjectionModel {
       // Position-specific (2)
       rbAgeInteraction, // 16: RB-specific age effect
       qbUpsideInteraction, // 17: QB breakout potential
+      // Elite calibration (3 - Phase 1)
+      eliteCeilingPressure, // 18: ceiling pressure for high KTC
+      eliteAgeRisk, // 19: elite + aging crash risk
+      ktcUpsideCap, // 20: room to grow (inverse of KTC)
+      // Breakout detection Phase 2 (5)
+      snapTrajectory, // 21: change in snap % from prior year
+      youngRisingSnap, // 22: young + rising snaps flag
+      efficiencyVsSnap, // 23: production efficiency vs opportunity
+      teDevelopmentStage, // 24: TE in breakout years (2-4)
+      lateSeasonSurge, // 25: momentum from late vs early season
+      // Market sentiment (2 - v3)
+      ktcMomentum, // 26: KTC trend direction
+      marketConfidence, // 27: inverse volatility (stability signal)
+      // Efficiency (2 - v3)
+      consistencyScore, // 28: inverse of weekly FP variance
+      touchesPerGame, // 29: opportunity signal (targets + carries)
+      // Analysis insights (4 - v4)
+      qbBackupSignal, // 30: backup QB detector
+      eliteSustain, // 31: elite players maintaining elite PPG
+      sampleConfidence, // 32: confidence based on games played
+      ageMarketPenalty, // 33: market ages players faster than perf
+      // Weekly/Red Zone insights (4 - v5)
+      ktcTrajectory, // 34: in-season KTC change (market reaction)
+      redZoneEfficiency, // 35: TD scoring efficiency in red zone
+      opportunityShare, // 36: target/rush share (opportunity signal)
+      elitePeak, // 37: elite + elite PPG counter-signal
+      // TE Elite fix (1 - v6)
+      teEliteIndicatorValue, // 38: TE-specific elite indicator
+      // v7 Comprehensive Improvements (8)
+      backupQbPenalty, // 39: penalize backup QBs with <10 games
+      weeklyKtcMomentum, // 40: in-season KTC momentum (late vs early)
+      ktcSurgeIndicator, // 41: proportion of weeks with >5% KTC gain
+      boomRate, // 42: % of games with boom performance
+      bustRate, // 43: % of games with bust performance
+      lateSeasonRatioNorm, // 44: late season vs full season FP ratio
+      efficiencyScore, // 45: position-specific yards/target or yards/carry
+      rookieTier, // 46: differentiate elite vs late-round rookies
+      // v8 Validation Analysis Improvements (4)
+      lowGamesPenalty, // 47: penalize ALL positions with <10 games
+      eliteValueAnchor, // 48: counter elite_ceiling_pressure for proven elite
+      ppgNonlinearity, // 49: flag for elite scorers (20+ PPG)
+      opportunityIncrease, // 50: amplified snap trajectory for breakouts
     ];
   }
 
   /**
    * Run forward pass through the neural network
+   * v3: 4 hidden layers (128 → 64 → 32 → 16 → output)
    */
   private forward(features: number[]): number {
     if (!this.weights) {
       throw new Error('Model weights not loaded. Call loadWeights() first.');
     }
+
+    // Detect model version based on available weights
+    const isV3 = 'fc_out.weight' in this.weights;
 
     // Layer 1: Linear + BatchNorm + ReLU
     let x = linear(
@@ -295,8 +583,36 @@ export class KTCProjectionModel {
     );
     x = relu(x);
 
-    // Output layer: Linear (no activation)
-    x = linear(x, this.weights['fc3.weight'], this.weights['fc3.bias']);
+    if (isV3) {
+      // v3: Layers 3-4 + output
+      // Layer 3: Linear + BatchNorm + ReLU
+      x = linear(x, this.weights['fc3.weight'], this.weights['fc3.bias']);
+      x = batchNorm(
+        x,
+        this.weights['bn3.weight'],
+        this.weights['bn3.bias'],
+        this.weights['bn3.running_mean'],
+        this.weights['bn3.running_var']
+      );
+      x = relu(x);
+
+      // Layer 4: Linear + BatchNorm + ReLU
+      x = linear(x, this.weights['fc4.weight'], this.weights['fc4.bias']);
+      x = batchNorm(
+        x,
+        this.weights['bn4.weight'],
+        this.weights['bn4.bias'],
+        this.weights['bn4.running_mean'],
+        this.weights['bn4.running_var']
+      );
+      x = relu(x);
+
+      // Output layer: Linear (no activation)
+      x = linear(x, this.weights['fc_out.weight'], this.weights['fc_out.bias']);
+    } else {
+      // v2: Direct output from layer 2
+      x = linear(x, this.weights['fc3.weight'], this.weights['fc3.bias']);
+    }
 
     return x[0];
   }
@@ -309,7 +625,22 @@ export class KTCProjectionModel {
    */
   predict(input: ProjectionInput): number {
     const features = this.prepareFeatures(input);
+
+    // Debug: Check for NaN in features
+    const nanIndex = features.findIndex(f => isNaN(f));
+    if (nanIndex !== -1) {
+      console.warn(`NaN found in feature at index ${nanIndex}, input:`, input);
+      return input.currentKtc;
+    }
+
     const normalizedKtc = this.forward(features);
+
+    // Handle NaN result from forward pass
+    if (isNaN(normalizedKtc)) {
+      console.warn('NaN result from forward pass, returning current KTC');
+      return input.currentKtc;
+    }
+
     const ktc = normalizedKtc * KTC_MAX;
     return Math.max(0, Math.min(KTC_MAX, Math.round(ktc)));
   }
