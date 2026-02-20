@@ -48,7 +48,7 @@ export async function addRosterMetrics(
   const getPositonalRankings = (
     position: string,
     type1: "ktc",
-    type2: "starter" | "bench" | "picks",
+    type2: "starter" | "bench",
   ) => {
     return Object.keys(rostersOptimal).sort((a, b) => {
       switch (type1) {
@@ -140,11 +140,13 @@ export async function addRosterMetrics(
             return acc + ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))];
           }, 0),
           picks_ktc_rank:
-            Object.keys(rosters)
+            [...rosters]
               .sort((a, b) => {
                 const aPicksKtc =
                   rosters
-                    .find((r) => r.roster_id.toString() === a)
+                    .find(
+                      (r) => r.roster_id.toString() === a.roster_id.toString(),
+                    )
                     ?.draftPicks.reduce(
                       (acc, cur) =>
                         acc +
@@ -153,7 +155,9 @@ export async function addRosterMetrics(
                     ) || 0;
                 const bPicksKtc =
                   rosters
-                    .find((r) => r.roster_id.toString() === b)
+                    .find(
+                      (r) => r.roster_id.toString() === b.roster_id.toString(),
+                    )
                     ?.draftPicks.reduce(
                       (acc, cur) =>
                         acc +
@@ -162,7 +166,9 @@ export async function addRosterMetrics(
                     ) || 0;
                 return bPicksKtc - aPicksKtc;
               })
-              .indexOf(roster.roster_id.toString()) + 1,
+              .findIndex(
+                (r) => r.roster_id.toString() === roster.roster_id.toString(),
+              ) + 1,
           optimal_qb_starters_ktc_rank:
             rankingsAll.optimal_qb_starters_ktc.indexOf(
               roster.roster_id.toString(),
