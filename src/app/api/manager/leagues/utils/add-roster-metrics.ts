@@ -1,26 +1,33 @@
 import { Allplayer } from "@/lib/types/common-types";
 import { Roster } from "@/lib/types/manager-types";
+import {
+  getDraftPickId,
+  getDraftPickKtcName,
+} from "@/utils/common/format-draftpick";
 import { getOptimalStarters } from "@/utils/common/get-optimal-starters";
 
 export async function addRosterMetrics(
   rosters: Roster[],
   rosterPositions: string[],
   ktcCurrent: { [player_id: string]: number },
-  allplayers: Allplayer[]
+  allplayers: Allplayer[],
 ) {
   const rankings = Object.fromEntries(
     rosters
       .sort(
         (a, b) =>
-          b.wins - a.wins || a.losses - b.losses || b.fp - a.fp || b.fpa - a.fpa
+          b.wins - a.wins ||
+          a.losses - b.losses ||
+          b.fp - a.fp ||
+          b.fpa - a.fpa,
       )
-      .map((roster, index) => [roster.roster_id, index + 1])
+      .map((roster, index) => [roster.roster_id, index + 1]),
   );
 
   const pointsRankings = Object.fromEntries(
     rosters
       .sort((a, b) => b.fp - a.fp)
-      .map((roster, index) => [roster.roster_id, index + 1])
+      .map((roster, index) => [roster.roster_id, index + 1]),
   );
 
   const rostersOptimal = Object.fromEntries(
@@ -30,18 +37,18 @@ export async function addRosterMetrics(
         roster.players,
         ktcCurrent,
         Object.fromEntries(
-          allplayers.map((player) => [player.player_id, player])
-        )
+          allplayers.map((player) => [player.player_id, player]),
+        ),
       );
 
       return [roster.roster_id, { optimalKtc }];
-    })
+    }),
   );
 
   const getPositonalRankings = (
     position: string,
     type1: "ktc",
-    type2: "starter" | "bench"
+    type2: "starter" | "bench" | "picks",
   ) => {
     return Object.keys(rostersOptimal).sort((a, b) => {
       switch (type1) {
@@ -80,23 +87,23 @@ export async function addRosterMetrics(
       (a, b) =>
         rostersOptimal[b].optimalKtc.optimalStarters.reduce(
           (acc, cur) => acc + cur.value,
-          0
+          0,
         ) -
         rostersOptimal[a].optimalKtc.optimalStarters.reduce(
           (acc, cur) => acc + cur.value,
-          0
-        )
+          0,
+        ),
     ),
     optimal_bench_ktc: Object.keys(rostersOptimal).sort(
       (a, b) =>
         rostersOptimal[b].optimalKtc.optimalBench.reduce(
           (acc, cur) => acc + cur.value,
-          0
+          0,
         ) -
         rostersOptimal[a].optimalKtc.optimalBench.reduce(
           (acc, cur) => acc + cur.value,
-          0
-        )
+          0,
+        ),
     ),
     optimal_qb_starters_ktc: getPositonalRankings("QB", "ktc", "starter"),
     optimal_qb_bench_ktc: getPositonalRankings("QB", "ktc", "bench"),
@@ -121,7 +128,7 @@ export async function addRosterMetrics(
           ].optimalKtc.optimalStarters.reduce((acc, cur) => acc + cur.value, 0),
           optimal_starters_ktc_rank:
             rankingsAll.optimal_starters_ktc.indexOf(
-              roster.roster_id.toString()
+              roster.roster_id.toString(),
             ) + 1,
           optimal_bench_ktc_total: rostersOptimal[
             roster.roster_id
@@ -129,41 +136,68 @@ export async function addRosterMetrics(
           optimal_bench_ktc_rank:
             rankingsAll.optimal_bench_ktc.indexOf(roster.roster_id.toString()) +
             1,
+          picks_ktc_total: roster.draftPicks.reduce((acc, cur) => {
+            return acc + ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))];
+          }, 0),
+          picks_ktc_rank:
+            Object.keys(rosters)
+              .sort((a, b) => {
+                const aPicksKtc =
+                  rosters
+                    .find((r) => r.roster_id.toString() === a)
+                    ?.draftPicks.reduce(
+                      (acc, cur) =>
+                        acc +
+                        ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))],
+                      0,
+                    ) || 0;
+                const bPicksKtc =
+                  rosters
+                    .find((r) => r.roster_id.toString() === b)
+                    ?.draftPicks.reduce(
+                      (acc, cur) =>
+                        acc +
+                        ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))],
+                      0,
+                    ) || 0;
+                return bPicksKtc - aPicksKtc;
+              })
+              .indexOf(roster.roster_id.toString()) + 1,
           optimal_qb_starters_ktc_rank:
             rankingsAll.optimal_qb_starters_ktc.indexOf(
-              roster.roster_id.toString()
+              roster.roster_id.toString(),
             ) + 1,
           optimal_qb_bench_ktc_rank:
             rankingsAll.optimal_qb_bench_ktc.indexOf(
-              roster.roster_id.toString()
+              roster.roster_id.toString(),
             ) + 1,
           optimal_rb_starters_ktc_rank:
             rankingsAll.optimal_rb_starters_ktc.indexOf(
-              roster.roster_id.toString()
+              roster.roster_id.toString(),
             ) + 1,
           optimal_rb_bench_ktc_rank:
             rankingsAll.optimal_rb_bench_ktc.indexOf(
-              roster.roster_id.toString()
+              roster.roster_id.toString(),
             ) + 1,
           optimal_wr_starters_ktc_rank:
             rankingsAll.optimal_wr_starters_ktc.indexOf(
-              roster.roster_id.toString()
+              roster.roster_id.toString(),
             ) + 1,
           optimal_wr_bench_ktc_rank:
             rankingsAll.optimal_wr_bench_ktc.indexOf(
-              roster.roster_id.toString()
+              roster.roster_id.toString(),
             ) + 1,
           optimal_te_starters_ktc_rank:
             rankingsAll.optimal_te_starters_ktc.indexOf(
-              roster.roster_id.toString()
+              roster.roster_id.toString(),
             ) + 1,
           optimal_te_bench_ktc_rank:
             rankingsAll.optimal_te_bench_ktc.indexOf(
-              roster.roster_id.toString()
+              roster.roster_id.toString(),
             ) + 1,
         },
       ];
-    })
+    }),
   );
 
   return metrics;
