@@ -137,7 +137,9 @@ export async function addRosterMetrics(
             rankingsAll.optimal_bench_ktc.indexOf(roster.roster_id.toString()) +
             1,
           picks_ktc_total: roster.draftPicks.reduce((acc, cur) => {
-            return acc + ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))];
+            return (
+              acc + (ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))] ?? 0)
+            );
           }, 0),
           picks_ktc_rank:
             [...rosters]
@@ -150,7 +152,8 @@ export async function addRosterMetrics(
                     ?.draftPicks.reduce(
                       (acc, cur) =>
                         acc +
-                        ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))],
+                        (ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))] ??
+                          0),
                       0,
                     ) || 0;
                 const bPicksKtc =
@@ -161,7 +164,8 @@ export async function addRosterMetrics(
                     ?.draftPicks.reduce(
                       (acc, cur) =>
                         acc +
-                        ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))],
+                        (ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))] ??
+                          0),
                       0,
                     ) || 0;
                 return bPicksKtc - aPicksKtc;

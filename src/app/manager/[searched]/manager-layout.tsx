@@ -19,7 +19,7 @@ export default function ManagerLayout({
   children: React.ReactNode;
 }) {
   const { isLoadingCommon, errorCommon } = useSelector(
-    (state: RootState) => state.common
+    (state: RootState) => state.common,
   );
   const {
     isLoadingUser,
@@ -28,6 +28,7 @@ export default function ManagerLayout({
     isLoadingLeagues,
     errorLeagues,
     leaguesProgress,
+    leagues,
   } = useSelector((state: RootState) => state.manager);
 
   useFetchAllplayers();
@@ -39,8 +40,10 @@ export default function ManagerLayout({
 
   const errors = useMemo(
     () => [...errorCommon, errorUser, errorLeagues].filter(Boolean),
-    [errorCommon, errorUser, errorLeagues]
+    [errorCommon, errorUser, errorLeagues],
   );
+
+  console.log({ user, leagues });
 
   return (
     <>

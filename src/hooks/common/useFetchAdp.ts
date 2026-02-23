@@ -19,8 +19,6 @@ export default function useFetchAdp() {
   const hasRedraft = !!adp.redraft;
   const hasDynasty = !!adp.dynasty;
 
-  console.log({ adp });
-
   // Fetch redraft ADP
   useEffect(() => {
     if (hasRedraft || redraftFetchedRef.current) return;
@@ -33,7 +31,7 @@ export default function useFetchAdp() {
           ...adpFilters,
           leagueType: "0",
         },
-      })
+      }),
     );
   }, [hasRedraft, dispatch, adpFilters]);
 
@@ -49,7 +47,7 @@ export default function useFetchAdp() {
           ...adpFilters,
           leagueType: "2",
         },
-      })
+      }),
     );
   }, [hasDynasty, dispatch, adpFilters]);
 }
