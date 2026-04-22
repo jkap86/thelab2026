@@ -26,6 +26,8 @@ export async function GET(req: NextRequest) {
   const limitParam = searchParams.get("limit");
   const offsetParam = searchParams.get("offset");
   const managersParam = searchParams.get("managers");
+  const manager1 = searchParams.get("manager1");
+  const manager2 = searchParams.get("manager2");
 
   // Validate and clamp limit/offset to prevent DoS
   const limit = Math.min(
@@ -281,6 +283,70 @@ export async function GET(req: NextRequest) {
     conditions.push(`l.settings ->> 'best_ball' = $${values.length + 1}`);
 
     values.push(leagueType2);
+  }
+
+  if (manager1) {
+    values.push(manager1);
+    const m1Idx = values.length;
+
+    if (playerId1) {
+      if (playerId1.includes(".")) {
+        // playerId1 is a draft pick - the pick's new owner must be manager1
+        conditions.push(`
+          EXISTS (
+            SELECT 1 FROM jsonb_array_elements(t.draft_picks) dp
+            WHERE ${draftPickEquals("$1")} AND dp->>'new' = $${m1Idx}
+          )
+        `);
+      } else {
+        // playerId1 is a player - manager1 received this player
+        conditions.push(`t.adds ->> $1 = $${m1Idx}`);
+      }
+    } else {
+      // no playerId1 - manager1 must have received something in the trade
+      conditions.push(`(
+        EXISTS (
+          SELECT 1 FROM jsonb_each_text(t.adds) e(k, v)
+          WHERE v = $${m1Idx}
+        )
+        OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements(t.draft_picks) dp
+          WHERE dp->>'new' = $${m1Idx}
+        )
+      )`);
+    }
+  }
+
+  if (manager2) {
+    values.push(manager2);
+    const m2Idx = values.length;
+
+    if (playerId2) {
+      if (playerId2.includes(".")) {
+        // playerId2 is a draft pick - the pick's new owner must be manager2
+        conditions.push(`
+          EXISTS (
+            SELECT 1 FROM jsonb_array_elements(t.draft_picks) dp
+            WHERE ${draftPickEquals("$2")} AND dp->>'new' = $${m2Idx}
+          )
+        `);
+      } else {
+        // playerId2 is a player - manager2 received this player
+        conditions.push(`t.adds ->> $2 = $${m2Idx}`);
+      }
+    } else {
+      // no playerId2 - manager2 must have received something in the trade
+      conditions.push(`(
+        EXISTS (
+          SELECT 1 FROM jsonb_each_text(t.adds) e(k, v)
+          WHERE v = $${m2Idx}
+        )
+        OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements(t.draft_picks) dp
+          WHERE dp->>'new' = $${m2Idx}
+        )
+      )`);
+    }
   }
 
   if (managersParam) {

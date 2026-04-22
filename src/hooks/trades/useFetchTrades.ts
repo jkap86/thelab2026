@@ -16,11 +16,15 @@ export default function useFetchTrades() {
     playerId4,
     leagueType1,
     leagueType2,
+    manager1,
+    manager2,
   } = useSelector((state: RootState) => state.trades);
 
   useEffect(() => {
     if (
       (trades &&
+        trades.manager1 === manager1 &&
+        trades.manager2 === manager2 &&
         trades.playerId1 === playerId1 &&
         trades.playerId2 === playerId2 &&
         trades.playerId3 === playerId3 &&
@@ -35,6 +39,8 @@ export default function useFetchTrades() {
     dispatch(
       fetchTrades({
         managers: leaguemateIds.length > 0 ? leaguemateIds : undefined,
+        manager1,
+        manager2,
         playerId1,
         playerId2,
         playerId3,

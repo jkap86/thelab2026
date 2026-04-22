@@ -20,6 +20,8 @@ const AllTrades = ({
     playerId4,
     leagueType1,
     leagueType2,
+    manager1,
+    manager2,
   } = useSelector((state: RootState) => state.trades);
 
   return (
@@ -31,6 +33,8 @@ const AllTrades = ({
           dispatch(
             fetchTrades({
               managers: leaguemateIds.length > 0 ? leaguemateIds : undefined,
+              manager1,
+              manager2,
               playerId1,
               playerId2,
               playerId3,

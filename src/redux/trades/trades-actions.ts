@@ -8,6 +8,8 @@ export const fetchTrades = createAsyncThunk<
     trades: Trade[];
     count: number;
     managers: string[] | undefined;
+    manager1: string | undefined;
+    manager2: string | undefined;
     playerId1: string | undefined;
     playerId2: string | undefined;
     playerId3: string | undefined;
@@ -17,6 +19,8 @@ export const fetchTrades = createAsyncThunk<
   },
   {
     managers: string[] | undefined;
+    manager1: string | undefined;
+    manager2: string | undefined;
     playerId1: string | undefined;
     playerId2: string | undefined;
     playerId3: string | undefined;
@@ -33,6 +37,8 @@ export const fetchTrades = createAsyncThunk<
   async (
     {
       managers,
+      manager1,
+      manager2,
       playerId1,
       playerId2,
       playerId3,
@@ -49,6 +55,8 @@ export const fetchTrades = createAsyncThunk<
         await axiosInstance.get("/api/trades", {
           params: {
             managers: managers ? JSON.stringify(managers) : undefined,
+            manager1,
+            manager2,
             playerId1,
             playerId2,
             playerId3,
@@ -64,6 +72,8 @@ export const fetchTrades = createAsyncThunk<
       return {
         ...response.data,
         managers,
+        manager1,
+        manager2,
         playerId1,
         playerId2,
         playerId3,

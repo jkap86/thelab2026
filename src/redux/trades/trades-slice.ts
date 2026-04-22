@@ -9,6 +9,8 @@ export interface TradesState {
 
   trades: {
     managers: string[] | undefined;
+    manager1: string | undefined;
+    manager2: string | undefined;
     playerId1: string | undefined;
     playerId2: string | undefined;
     playerId3: string | undefined;
@@ -22,6 +24,8 @@ export interface TradesState {
 
   username: string | undefined;
   leaguemateIds: string[];
+  manager1: string | undefined;
+  manager2: string | undefined;
   playerId1: string | undefined;
   playerId2: string | undefined;
   playerId3: string | undefined;
@@ -38,6 +42,8 @@ const initialState: TradesState = {
 
   username: undefined,
   leaguemateIds: [],
+  manager1: undefined,
+  manager2: undefined,
   playerId1: undefined,
   playerId2: undefined,
   playerId3: undefined,
@@ -80,6 +86,8 @@ const tradesSlice = createSlice({
 
         if (
           state.trades &&
+          state.trades.manager1 === action.payload.manager1 &&
+          state.trades.manager2 === action.payload.manager2 &&
           state.trades.playerId1 === action.payload.playerId1 &&
           state.trades.playerId2 === action.payload.playerId2 &&
           state.trades.playerId3 === action.payload.playerId3 &&

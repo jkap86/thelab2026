@@ -7,6 +7,7 @@ import SearchInput from "@/components/common/search-input";
 import AllTrades from "@/components/trades/all-trades";
 import FiltersModal from "@/components/trades/filters-modal";
 import LeaguemateTrades from "@/components/trades/leaguemate-trades";
+import axiosInstance from "@/lib/axios-instance";
 import useFetchAllPlayers from "@/hooks/common/useFetchAllplayers";
 import useFetchKtcCurrent from "@/hooks/common/useFetchKtcCurrent";
 import useFetchNflState from "@/hooks/common/useFetchNflState";
@@ -17,6 +18,8 @@ import { updateTradesState } from "@/redux/trades/trades-slice";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+
+type ManagerOption = { user_id: string; username: string; avatar: string | null };
 
 const TradesPage = () => {
   const dispatch: AppDispatch = useDispatch();
@@ -36,9 +39,12 @@ const TradesPage = () => {
     playerId4,
     leagueType1,
     leagueType2,
+    manager1,
+    manager2,
   } = useSelector((state: RootState) => state.trades);
 
   const [usernameInput, setUsernameInput] = useState("");
+  const [managers, setManagers] = useState<ManagerOption[]>([]);
 
   const [tab, setTab] = useState<"All" | "Leaguemate">("All");
   const [isOpen, setIsOpen] = useState(false);
@@ -46,6 +52,13 @@ const TradesPage = () => {
   useFetchNflState();
   useFetchAllPlayers();
   useFetchKtcCurrent();
+
+  useEffect(() => {
+    axiosInstance
+      .get("/api/common/managers")
+      .then((res) => setManagers(res.data))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!playerId1 && playerId3) {
@@ -74,6 +87,18 @@ const TradesPage = () => {
         dispatch(updateTradesState({ key: "playerId4", value: "" }));
     }
   }, [playerId2, playerId4]);
+
+  const managerOptions = useMemo(
+    () =>
+      managers.map((m) => ({
+        id: m.user_id,
+        text: m.username,
+        display: (
+          <Avatar avatar_id={m.avatar || ""} name={m.username} type="user" />
+        ),
+      })),
+    [managers]
+  );
 
   const playerPickOptions = useMemo(() => {
     const pick_seasons =
@@ -144,6 +169,16 @@ const TradesPage = () => {
     <div>
       <div className="flex justify-evenly w-full">
         <div className=" mx-auto h-full w-[45%]">
+          <div className="h-[3rem] mb-[2rem]">
+            <Search
+              searched={manager1 ?? ""}
+              setSearched={(value) =>
+                dispatch(updateTradesState({ key: "manager1", value }))
+              }
+              options={managerOptions.filter((o) => o.id !== manager2)}
+              placeholder="Manager"
+            />
+          </div>
           <div className="h-[3rem]">
             <Search
               searched={playerId1 ?? ""}
@@ -178,6 +213,16 @@ const TradesPage = () => {
         </div>
 
         <div className=" mx-auto h-full w-[45%]">
+          <div className="h-[3rem] mb-[2rem]">
+            <Search
+              searched={manager2 ?? ""}
+              setSearched={(value) =>
+                dispatch(updateTradesState({ key: "manager2", value }))
+              }
+              options={managerOptions.filter((o) => o.id !== manager1)}
+              placeholder="Manager"
+            />
+          </div>
           <div className="h-[3rem]">
             <Search
               searched={playerId2 ?? ""}
@@ -292,7 +337,10 @@ const TradesPage = () => {
             onClick={() =>
               dispatch(
                 fetchTrades({
-                  managers: tab === "Leaguemate" ? leaguemateIds : undefined,
+                  managers:
+                    tab === "Leaguemate" ? leaguemateIds : undefined,
+                  manager1,
+                  manager2,
                   playerId1,
                   playerId2,
                   playerId3,
@@ -300,6 +348,8 @@ const TradesPage = () => {
                   leagueType1,
                   leagueType2,
                   offset:
+                    manager1 === trades?.manager1 &&
+                    manager2 === trades?.manager2 &&
                     playerId1 === trades?.playerId1 &&
                     playerId2 === trades?.playerId2 &&
                     playerId3 === trades?.playerId3 &&
@@ -316,7 +366,9 @@ const TradesPage = () => {
           </button>
         </div>
       </div>
-      {playerId1 === trades?.playerId1 &&
+      {manager1 === trades?.manager1 &&
+      manager2 === trades?.manager2 &&
+      playerId1 === trades?.playerId1 &&
       playerId2 === trades?.playerId2 &&
       playerId3 === trades?.playerId3 &&
       playerId4 === trades?.playerId4 &&
