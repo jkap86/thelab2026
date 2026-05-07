@@ -116,8 +116,8 @@ const initialState: ManagerState = {
     leagues: {
       column1: "KTC S Rk",
       column2: "KTC B Rk",
-      column3: "KTC QB S Rk",
-      column4: "KTC QB B Rk",
+      column3: "KTC P Rk",
+      column4: "KTC T Rk",
       sortBy: {
         column: 0,
         direction: "asc",

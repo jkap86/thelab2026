@@ -41,7 +41,7 @@ export async function addRosterMetrics(
         ),
       );
 
-      return [roster.roster_id, { optimalKtc }];
+      return [roster.roster_id, { optimalKtc, draftPicks: roster.draftPicks }];
     }),
   );
 
@@ -102,6 +102,35 @@ export async function addRosterMetrics(
         ) -
         rostersOptimal[a].optimalKtc.optimalBench.reduce(
           (acc, cur) => acc + cur.value,
+          0,
+        ),
+    ),
+    total_ktc: Object.keys(rostersOptimal).sort(
+      (a, b) =>
+        rostersOptimal[b].optimalKtc.optimalStarters.reduce(
+          (acc, cur) => acc + cur.value,
+          0,
+        ) +
+        rostersOptimal[b].optimalKtc.optimalBench.reduce(
+          (acc, cur) => acc + cur.value,
+          0,
+        ) +
+        rostersOptimal[b].draftPicks.reduce(
+          (acc, cur) =>
+            acc + (ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))] ?? 0),
+          0,
+        ) -
+        rostersOptimal[a].optimalKtc.optimalStarters.reduce(
+          (acc, cur) => acc + cur.value,
+          0,
+        ) -
+        rostersOptimal[a].optimalKtc.optimalBench.reduce(
+          (acc, cur) => acc + cur.value,
+          0,
+        ) -
+        rostersOptimal[a].draftPicks.reduce(
+          (acc, cur) =>
+            acc + (ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))] ?? 0),
           0,
         ),
     ),
@@ -173,6 +202,23 @@ export async function addRosterMetrics(
               .findIndex(
                 (r) => r.roster_id.toString() === roster.roster_id.toString(),
               ) + 1,
+          total_ktc_total:
+            rostersOptimal[roster.roster_id].optimalKtc.optimalStarters.reduce(
+              (acc, cur) => acc + cur.value,
+              0,
+            ) +
+            rostersOptimal[roster.roster_id].optimalKtc.optimalBench.reduce(
+              (acc, cur) => acc + cur.value,
+              0,
+            ) +
+            rostersOptimal[roster.roster_id].draftPicks.reduce(
+              (acc, cur) =>
+                acc +
+                (ktcCurrent[getDraftPickKtcName(getDraftPickId(cur))] ?? 0),
+              0,
+            ),
+          total_ktc_rank:
+            rankingsAll.total_ktc.indexOf(roster.roster_id.toString()) + 1,
           optimal_qb_starters_ktc_rank:
             rankingsAll.optimal_qb_starters_ktc.indexOf(
               roster.roster_id.toString(),

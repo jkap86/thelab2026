@@ -45,6 +45,20 @@ export const leaguesColumnOptions = [
     ) => getTextColor(value, min, max, avg, reverse),
   },
   {
+    label: "KTC Total Rank",
+    abbrev: "KTC T Rk",
+    desc: "KeepTradeCut total value rank.",
+    key: "total_ktc_rank",
+    className: "font-pulang text-[2.5rem]",
+    style: (
+      value: number,
+      min: number,
+      max: number,
+      avg: number,
+      reverse?: boolean,
+    ) => getTextColor(value, min, max, avg, reverse),
+  },
+  {
     label: "KTC QB Starters Rank",
     abbrev: "KTC QB S Rk",
     desc: "KeepTradeCut total optimal qb starters value rank",
@@ -365,6 +379,20 @@ export const teamsColumnOptions: ColumnOption[] = [
     abbrev: "KTC P",
     desc: "KeepTradeCut total draft picks value",
     key: "picks_ktc_total",
+    className: "font-pulang text-[1.5rem]",
+    style: (
+      value: number,
+      min: number,
+      max: number,
+      avg: number,
+      reverse?: boolean,
+    ) => getTextColor(value, min, max, avg, reverse),
+  },
+  {
+    label: "KTC Total",
+    abbrev: "KTC T",
+    desc: "KeepTradeCut total value",
+    key: "total_ktc_total",
     className: "font-pulang text-[1.5rem]",
     style: (
       value: number,

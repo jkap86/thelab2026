@@ -56,6 +56,9 @@ export type Roster = {
   optimal_bench_ktc_rank?: number;
   picks_ktc_total?: number;
   picks_ktc_rank?: number;
+  total_ktc_total?: number;
+  total_ktc_rank?: number;
+  optimal_qb_starters_ktc_total?: number;
   optimal_qb_starters_ktc_rank?: number;
   optimal_qb_bench_ktc_rank?: number;
   optimal_rb_starters_ktc_rank?: number;
